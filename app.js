@@ -167,11 +167,14 @@ function coverStyle(biz){
   return `background-image:url('${esc(img)}'); background-size:cover; background-position:center;`;
 }
 
-/* Default logo used the same way, until a business uploads its own (biz.logoImage). */
-const DEFAULT_LOGO_IMAGE = 'https://res.cloudinary.com/dbk47jrff/image/upload/v1791957832/aura_sygf3z.jpg';
+/* Businesses without an uploaded logo (biz.logoImage) get a clean navy square with their first letter. */
 function logoStyle(biz){
-  const img = safeImgUrl(biz && biz.logoImage, DEFAULT_LOGO_IMAGE);
-  return `background-image:url('${esc(img)}'); background-size:cover; background-position:center;`;
+  const custom = safeImgUrl(biz && biz.logoImage, '');
+  if(custom) return `background-image:url('${esc(custom)}'); background-size:cover; background-position:center;`;
+  const m = String((biz && biz.name) || 'A').trim().charAt(0).match(/[A-Za-z0-9]/);
+  const letter = (m ? m[0] : 'A').toUpperCase();
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='#0D1B2A'/><text x='32' y='45' font-family='Arial,sans-serif' font-size='36' font-weight='700' text-anchor='middle' fill='#FF9F1C'>" + letter + "</text></svg>";
+  return 'background-image:url(data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27') + '); background-size:cover; background-position:center;';
 }
 
 // Centralised feature-access checker — the ONLY place feature gating logic lives.
@@ -602,7 +605,7 @@ function renderBizGrid(){
 function getAllowedSocials(biz){
   const socials = [];
   if(biz.whatsapp && checkFeatureAccess('socialWhatsapp', biz.plan)){
-    socials.push({ key:'whatsapp', label:'WhatsApp', icon:ICON.chat, url:'https://wa.me/'+String(biz.whatsapp).replace(/\D/g,'') });
+    socials.push({ key:'whatsapp', label:'WhatsApp', icon:ICON.chat, url:'https://wa.me/'+bizWaDigits(biz) });
   }
   if(biz.socialLinks && biz.socialLinks.tiktok && checkFeatureAccess('socialTiktok', biz.plan)){
     socials.push({ key:'tiktok', label:'TikTok', icon:ICON.music, url:'https://www.tiktok.com/@'+encodeURIComponent(String(biz.socialLinks.tiktok).replace('@','').trim()) });
@@ -714,7 +717,7 @@ function renderBusinessProfile(id){
           </div>
           <div class="sidebar-card">
             <h5>Contact</h5>
-            ${biz.whatsapp && checkFeatureAccess('socialWhatsapp', biz.plan) ? `<a class="btn btn-outline btn-block btn-sm" style="margin-bottom:8px;" target="_blank" rel="noopener" href="https://wa.me/${esc(String(biz.whatsapp).replace(/\D/g,''))}">${ICON.chat} Message on WhatsApp</a>`:''}
+            ${biz.whatsapp && checkFeatureAccess('socialWhatsapp', biz.plan) ? `<a class="btn btn-outline btn-block btn-sm" style="margin-bottom:8px;" target="_blank" rel="noopener" href="https://wa.me/${esc(bizWaDigits(biz))}">${ICON.chat} Message on WhatsApp</a>`:''}
             <button class="btn btn-primary btn-block btn-sm" id="book-appt-btn-2">${ICON.calendar} Book Appointment</button>
             <button class="btn btn-outline btn-block btn-sm mt8" id="share-page-btn">${ICON.link} Share this page</button>
           </div>
@@ -771,7 +774,7 @@ function upgradeNeededModal(feature, biz){
         <div class="ico">${ICON.lock}</div>
         <h3>${esc(biz.name)} hasn't enabled online booking</h3>
         <p>This business is on a plan that doesn't include appointment booking yet. Try contacting them on WhatsApp instead.</p>
-        ${biz.whatsapp ? `<a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/${esc(String(biz.whatsapp).replace(/\D/g,''))}">${ICON.chat} Message on WhatsApp</a>` : ''}
+        ${biz.whatsapp ? `<a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/${esc(bizWaDigits(biz))}">${ICON.chat} Message on WhatsApp</a>` : ''}
       </div>
     </div>
   `;
@@ -1207,7 +1210,7 @@ function renderDashProfile(biz){
         <div class="field"><label>Location</label><input id="edit-biz-location" value="${escapeAttr(biz.location)}"></div>
       </div>
       <div class="field"><label>Description</label><textarea id="edit-biz-desc">${escapeAttr(biz.description)}</textarea></div>
-      <div class="field"><label>WhatsApp number (with country code, no +)</label><input id="edit-biz-whatsapp" value="${escapeAttr(biz.whatsapp||'')}" placeholder="2547XXXXXXXX"></div>
+      <div class="field"><label>WhatsApp number (e.g. 0712345678)</label><input id="edit-biz-whatsapp" value="${escapeAttr(biz.whatsapp||'')}" placeholder="07XXXXXXXX"></div>
       <button class="btn btn-primary" id="save-profile-btn">Save changes</button>
     </div>
 
@@ -1489,6 +1492,8 @@ function renderDashAppointments(biz){
   `;
 }
 
+/* The business's own WhatsApp number, as wa.me digits. Never falls back to the platform number. */
+function bizWaDigits(biz){ return waNumber(biz && biz.whatsapp) || String((biz && biz.whatsapp) || '').replace(/\D/g,''); }
 /* Kenyan number -> international digits for wa.me (0712345678, +254712345678, 712345678 -> 254712345678). '' if invalid. */
 function waNumber(raw){
   let d = String(raw || '').replace(/\D/g, '');
@@ -1691,7 +1696,7 @@ function renderDashSubscription(biz){
 
     <div class="panel">
       <div class="panel-head"><h3>Choose a plan</h3></div>
-      <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="pricing-grid dash-plans">
         ${PLAN_ORDER.map(pid=>{
           const p = PLANS[pid];
           const isCurrent = pid === sub.plan;
@@ -1818,7 +1823,7 @@ function wireDashSectionEvents(section, biz){
       fresh.category = document.getElementById('edit-biz-cat').value;
       fresh.location = document.getElementById('edit-biz-location').value.trim();
       fresh.description = document.getElementById('edit-biz-desc').value.trim();
-      fresh.whatsapp = document.getElementById('edit-biz-whatsapp').value.trim().replace(/^\+/,'');
+      { const rawWa = document.getElementById('edit-biz-whatsapp').value.trim(); fresh.whatsapp = waNumber(rawWa) || rawWa.replace(/^\+/,''); }
       saveBusiness(fresh); showToast('Business profile saved'); renderDashboard('profile');
     });
     const copyLinkBtn = document.getElementById('copy-share-link-btn');
