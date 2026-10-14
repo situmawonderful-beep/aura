@@ -657,3 +657,18 @@ img.brand-mark{ width:36px; height:36px; object-fit:cover; border-radius:0; back
 
 /* logo: no white frame around it */
 .mockup-avatar{ border:none; background:transparent; box-shadow:none; }
+
+/* ================= WORDMARK LOGO (name as logo) ================= */
+.brand{ gap:0; }
+.brand-word{ font-family: var(--font-body); font-weight:800; font-size:31px; line-height:1; letter-spacing:-0.035em; text-transform:lowercase; color: var(--accent); }
+.site-footer .brand-word{ font-size:28px; color: var(--accent); }
+.app-sidebar .brand-word{ font-size:28px; }
+.avatar-letter{ display:grid; place-items:center; width:100%; height:100%; background:#0D1B2A; color: var(--accent); font-family: var(--font-body); font-weight:800; font-size:34px; line-height:1; }
+
+/* ================= PHONE FIXES (dashboard) ================= */
+.hours-row{ flex-wrap:wrap; gap:6px 12px; }
+.hours-row > div{ flex-wrap:wrap; }
+input[type=time]{ min-width:0; }
+.dash-plans{ grid-template-columns: repeat(4,1fr); }
+@media (max-width:1200px){ .dash-plans{ grid-template-columns: repeat(2,1fr); } }
+@media (max-width:680px){ .dash-plans{ grid-template-columns: 1fr; } }
