@@ -248,7 +248,7 @@ auth.onAuthStateChanged(fbUser => {
       } else {
         currentAuthUser = null;
         auth.signOut();
-        showToast("This account isn't linked to a business. Contact the admin.", 'error');
+        showToast("This account isn't linked to a business. Contact us on WhatsApp to get set up.", 'error');
       }
     }
     authReady = true;
@@ -355,6 +355,16 @@ function getRoute(){
   return { view: segments[0] || 'home', sub: segments[1] || null, params };
 }
 
+function showBootLoader(on){
+  const el = document.getElementById('boot-loader'); if(!el) return;
+  el.style.display = on ? 'flex' : 'none';
+  if(on){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('public-nav').style.display = 'none';
+    document.getElementById('public-footer').style.display = 'none';
+  }
+}
+
 function renderRoute(){
   const route = getRoute();
   const publicViews = ['home','pricing','discover','business','login'];
@@ -366,8 +376,10 @@ function renderRoute(){
   // existing session back to us.
   const user = getCurrentUser();
   if(isAppView && !authReady){
+    showBootLoader(true); // never leave a blank or stale page while the saved login is being restored
     return; // onAuthStateChanged will call renderRoute() again once it resolves
   }
+  showBootLoader(false);
   if(route.view === 'dashboard' && (!user || user.role !== 'owner')){
     navigate('login'); return;
   }
@@ -1019,6 +1031,80 @@ document.querySelectorAll('.pw-toggle').forEach(btn=>{
     btn.textContent = input.type === 'password' ? 'Show' : 'Hide';
   });
 });
+
+
+/* ---- Connect Google to the account you are already logged into (guaranteed link, same account) ---- */
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('#link-google-btn');
+  if(!btn) return;
+  const cu = auth.currentUser;
+  if(!cu) return;
+  btn.disabled = true;
+  // linkWithPopup is called straight from the tap so phone browsers don't block the window
+  cu.linkWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => {
+    showToast('Google connected. You can now log in with Google.');
+    renderRoute();
+  }).catch(err => {
+    console.error('Google link failed', err);
+    if(['auth/popup-closed-by-user','auth/cancelled-popup-request','auth/user-cancelled'].includes(err.code)) return;
+    const msgs = {
+      'auth/credential-already-in-use': 'That Google account is already connected to another Aura account.',
+      'auth/provider-already-linked': 'Google is already connected to this account.',
+      'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
+      'auth/operation-not-allowed': 'Google sign-in is not switched on yet. Please contact us.',
+      'auth/unauthorized-domain': 'This web address is not approved for Google sign-in yet. Please contact us.',
+      'auth/network-request-failed': 'Could not reach Google - check your internet connection.'
+    };
+    showToast(msgs[err.code] || ('Could not connect Google (' + (err.code || err.message || 'unknown') + '). Please try again.'), 'error');
+  }).finally(() => { btn.disabled = false; });
+});
+
+/* ---- Sign in with Google ----
+   Role rules are unchanged: a Google account only gets in if its Firebase uid is the admin or is
+   linked to a business (Firebase links Google to an existing password account with the same email). */
+function applyPersistence(){
+  const remember = !!(document.getElementById('login-remember') || {}).checked;
+  return auth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION).catch(() => {});
+}
+(function wireGoogleSignIn(){
+  const btn = document.getElementById('google-signin-btn');
+  const remember = document.getElementById('login-remember');
+  if(remember) remember.addEventListener('change', applyPersistence);
+  applyPersistence();
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    if(/FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|musical_ly/i.test(navigator.userAgent)){
+      showToast('Google blocks sign-in inside this app. Open this page in Chrome or Safari and try again.', 'error'); return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    btn.disabled = true;
+    // signInWithPopup is called straight from the tap so phone browsers don't block the window
+    auth.signInWithPopup(provider).then(cred => {
+      whenCacheReady(() => {
+        const isAdmin = cred.user.uid === ADMIN_UID;
+        const biz = isAdmin ? null : getBusinesses().find(b => b.ownerUid === cred.user.uid);
+        if(!isAdmin && !biz) return; // the auth listener signs out and explains
+        showToast('Welcome back' + (isAdmin ? '' : ', ' + biz.name) + '!');
+        navigate(isAdmin ? 'admin' : 'dashboard');
+      });
+    }).catch(err => {
+      console.error('Google sign-in failed', err);
+      const quiet = ['auth/popup-closed-by-user','auth/cancelled-popup-request','auth/user-cancelled'];
+      if(quiet.includes(err.code)) return;
+      const msgs = {
+        'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
+        'auth/operation-not-allowed': 'Google sign-in is not switched on yet. Please contact us.',
+        'auth/unauthorized-domain': 'This web address is not approved for Google sign-in yet. Please contact us.',
+        'auth/network-request-failed': 'Could not reach Google - check your internet connection.',
+        'auth/web-storage-unsupported': 'Your browser is blocking cookies or storage. Turn off tracking protection for this site, or try Chrome.',
+        'auth/operation-not-supported-in-this-environment': 'Google sign-in needs the site opened from a web address (http or https), not a file.',
+        'auth/account-exists-with-different-credential': 'This email already has a password account. Log in with your password, then open Settings and tap Connect Google.'
+      };
+      showToast(msgs[err.code] || ('Google sign-in failed (' + (err.code || err.message || 'unknown') + '). Please try again.'), 'error');
+    }).finally(() => { btn.disabled = false; });
+  });
+})();
 
 document.getElementById('forgot-pw-link').addEventListener('click', (e)=>{
   e.preventDefault();
@@ -1786,13 +1872,21 @@ function wireUpgradeModal(biz){
 }
 
 /* ---- Settings ---- */
+function googleLinkedEmail(){
+  const cu = auth.currentUser;
+  const p = cu && (cu.providerData || []).find(x => x && x.providerId === 'google.com');
+  return p ? (p.email || 'connected') : '';
+}
+
 function renderDashSettings(biz){
   const user = getCurrentUser();
+  const gEmail = googleLinkedEmail();
   return `
     <div class="panel settings-section">
       <div class="panel-head"><h3>Account</h3></div>
       <div class="settings-row"><div class="stxt"><b>Name</b><span>${esc(user?user.name:'Owner')}</span></div><button class="btn btn-outline btn-sm" data-toast="Editing your name isn't available yet.">Edit</button></div>
       <div class="settings-row"><div class="stxt"><b>Email</b><span>${esc(user?user.email:'—')}</span></div><button class="btn btn-outline btn-sm" data-toast="Editing your email isn't available yet.">Edit</button></div>
+      <div class="settings-row"><div class="stxt"><b>Google sign-in</b><span>${gEmail ? 'Connected: ' + esc(gEmail) : 'Not connected. Connect it to log in with one tap.'}</span></div>${gEmail ? '<span class="badge badge-completed">Connected</span>' : '<button class="btn btn-outline btn-sm" id="link-google-btn">Connect Google</button>'}</div>
       <div class="settings-row"><div class="stxt"><b>Password</b><span>••••••••</span></div><button class="btn btn-outline btn-sm" data-toast="Password changes aren't available yet.">Change</button></div>
     </div>
     <div class="panel settings-section">
@@ -2204,5 +2298,6 @@ document.getElementById('footer-admin-link').addEventListener('click', (e)=>{
 (function init(){
   if(!window.location.hash) window.location.hash = 'home';
   startBusinessListener();
+  setTimeout(()=>{ const m = document.getElementById('boot-msg'); if(!authReady && m) m.textContent = 'Taking longer than usual - check your internet connection'; }, 12000);
   renderRoute(); // first pass renders public pages immediately; the listener + auth state re-render again once ready
 })();
