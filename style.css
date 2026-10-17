@@ -672,3 +672,18 @@ input[type=time]{ min-width:0; }
 .dash-plans{ grid-template-columns: repeat(4,1fr); }
 @media (max-width:1200px){ .dash-plans{ grid-template-columns: repeat(2,1fr); } }
 @media (max-width:680px){ .dash-plans{ grid-template-columns: 1fr; } }
+
+/* ================= GOOGLE SIGN-IN + LOADER ================= */
+.or-divider{ display:flex; align-items:center; gap:14px; margin:18px 0; color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.08em; }
+.or-divider::before, .or-divider::after{ content:""; flex:1; height:1px; background:var(--line-strong); }
+.btn-google{ background:#fff; color:#0D1B2A; border:1px solid var(--line-strong); display:flex; align-items:center; justify-content:center; gap:10px; font-weight:600; }
+.btn-google:hover{ border-color:var(--navy); box-shadow:var(--shadow-sm); }
+.btn-google:disabled{ opacity:.6; cursor:wait; }
+.boot-loader{ position:fixed; inset:0; z-index:50; background:var(--navy); color:#D3DCE6; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center; padding:24px; }
+.boot-loader .brand-word{ font-size:40px; }
+.boot-loader p{ font-size:13.5px; margin:0; }
+.spinner{ width:30px; height:30px; border:3px solid rgba(255,255,255,.18); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.checkbox-row{ white-space:nowrap; }
+.form-inline{ flex-wrap:wrap; gap:8px 14px; }
+#forgot-pw-link{ white-space:nowrap; }
