@@ -29,7 +29,7 @@
     </nav>
     <div class="nav-actions">
       <a href="#login" class="btn btn-ghost btn-sm" data-nav="login" id="nav-login-btn">Log in</a>
-      <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" class="btn btn-primary btn-sm" id="nav-signup-btn">List Your Business</a>
+      <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" class="btn btn-primary btn-sm" id="nav-signup-btn">List Your Business <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="whatsapp" style="width:20px ; height: 20px;"></a>
       <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">☰</button>
     </div>
   </div>
@@ -38,13 +38,15 @@
     <a href="#discover" data-nav="discover">Discover</a>
     <a href="#pricing" data-nav="pricing">Pricing</a>
     <a href="#login" data-nav="login">Log in</a>
-    <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener">List Your Business</a>
+    <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener">List Your Business <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="whatsapp" style="width:20px ; height: 20px;"></a>
   </div>
 </header>
 
 <main id="app-root">
 
 <!-- ============ LANDING ============ -->
+<div id="boot-loader" class="boot-loader" style="display:none" role="status" aria-live="polite"><span class="brand-word">aura</span><div class="spinner"></div><p id="boot-msg">Loading your dashboard</p></div>
+
 <section class="view" id="view-home" data-view="home">
   <div class="hero">
     <div class="aurora" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
@@ -72,7 +74,7 @@
           <div class="mockup-cover"><div class="mockup-avatar"><span class="avatar-letter">a</span></div></div>
           <div class="mockup-body">
             <h4>Your Business Name</h4>
-            <div class="meta">Barbershop · Salon · Spa</div>
+            <div class="meta">Barbershop · Salon · Spa . Masseging</div>
             <div class="mockup-services">
               <div class="mockup-service-row"><span>Your first service</span><b>KSh ···</b></div>
               <div class="mockup-service-row"><span>Your second service</span><b>KSh ···</b></div>
@@ -90,7 +92,7 @@
       <div class="section-head flex-between" style="align-items:flex-end;">
         <div>
           <span class="kicker">On Aura</span>
-          <h2>Businesses already online</h2>
+          <h2>Businesses already <em>online</em></h2>
         </div>
         <a href="#discover" data-nav="discover" class="btn btn-outline btn-sm">See all businesses</a>
       </div>
@@ -107,8 +109,8 @@
       <div class="steps-grid">
         <div class="step-card">
           <div class="step-num">1</div>
-          <h3>Create your business</h3>
-          <p>Add your business name, services, photos, location and opening hours.</p>
+          <h3><strong><em>Create your business</em></strong></h3>
+          <p>Add your business name, services, photos, location and opening / closing hours.</p>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
@@ -142,7 +144,7 @@
           <h3>Ready to give your business a home online?</h3>
           <p>Message us and we'll get your business listed on Aura.</p>
         </div>
-        <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" class="btn btn-accent">List Your Business</a>
+        <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" class="btn btn-accent">List Your Business<img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" style="width: 25px; height: 25px;"/></a>
       </div>
     </div>
   </div>
@@ -215,11 +217,13 @@
           <div class="err">Enter your password.</div>
         </div>
         <div class="form-inline">
-          <label class="checkbox-row"><input type="checkbox" id="login-remember"> Remember me</label>
+          <label class="checkbox-row"><input type="checkbox" id="login-remember" checked> Remember me</label>
           <a href="#" id="forgot-pw-link" style="color:var(--accent-ink);font-weight:600;">Forgot password?</a>
         </div>
         <button type="submit" class="btn btn-primary btn-block">Log in</button>
       </form>
+      <div class="or-divider"><span>or</span></div>
+      <button type="button" class="btn btn-google btn-block" id="google-signin-btn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Sign in with Google</button>
       <div class="form-foot">Don't have a business on Aura yet? <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" style="color:var(--accent-ink);font-weight:600;">Message us to get listed</a></div>
     </div>
   </div>

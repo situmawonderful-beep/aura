@@ -48,7 +48,7 @@ function saveBusiness(updated){
   // in the background and the onSnapshot listener reconciles afterwards.
   const idx = businessCache.findIndex(b => b.id === updated.id);
   if(idx > -1) businessCache[idx] = updated;
-  const { appointments, ...toSave } = updated; // appointments live in their own subcollection
+  const { appointments, busy, ...toSave } = updated; // appointments + busy slots live in their own subcollections
   db.collection('businesses').doc(updated.id).set(toSave)
     .catch(err => {
       console.error('Failed to save business', err);
@@ -61,7 +61,7 @@ function startBusinessListener(){
   db.collection('businesses').onSnapshot(snapshot => {
     businessCache = snapshot.docs.map(doc => {
       const existing = businessCache.find(b => b.id === doc.id);
-      return { appointments: existing ? existing.appointments : [], ...doc.data(), id: doc.id };
+      return { appointments: existing ? existing.appointments : [], busy: existing ? existing.busy : [], ...doc.data(), id: doc.id };
     });
     cacheReady = true;
     cacheReadyWaiters.splice(0).forEach(cb => cb());
@@ -86,15 +86,71 @@ function ensureAppointmentsListener(bizId){
       const biz = getBusiness(bizId);
       if(!biz) return;
       biz.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedFlags[bizId + ':appts'] = true;
+      maybeBackfillBusy(bizId);
       renderRoute();
     }, err => console.error('Appointments listener error', err));
 }
 
+/* Privacy design: customer details (name, phone, email) live ONLY in appointments, which only the
+   business owner and the admin can read. The public booking page reads businesses/{id}/busy instead:
+   one tiny document per taken slot holding just { date, time, apptId }. The slot document's id is
+   "YYYY-MM-DD_HH:MM", so a slot can only ever be taken once (double-booking is impossible). */
+const busyListeners = {}, loadedFlags = {}, busyBackfilled = {};
+function ensureBusyListener(bizId){
+  if(busyListeners[bizId]) return;
+  busyListeners[bizId] = db.collection('businesses').doc(bizId).collection('busy')
+    .onSnapshot(snap => {
+      const biz = getBusiness(bizId);
+      if(!biz) return;
+      biz.busy = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedFlags[bizId + ':busy'] = true;
+      maybeBackfillBusy(bizId);
+      renderRoute();
+    }, err => console.error('Busy-slot listener error', err));
+}
+
+/* Bookings made before this update have no slot document. The first time the owner (or admin) opens
+   their dashboard, create the missing ones so those times stay blocked for the public. */
+function maybeBackfillBusy(bizId){
+  if(busyBackfilled[bizId] || !loadedFlags[bizId + ':busy'] || !loadedFlags[bizId + ':appts']) return;
+  const biz = getBusiness(bizId), u = auth.currentUser;
+  if(!biz || !u || (biz.ownerUid !== u.uid && u.uid !== ADMIN_UID)) return;
+  busyBackfilled[bizId] = true;
+  const have = new Set((biz.busy || []).map(b => b.id));
+  const today = new Date().toISOString().slice(0,10);
+  const batch = db.batch(); let n = 0;
+  (biz.appointments || []).forEach(a => {
+    if(a.status === 'cancelled' || a.status === 'completed' || a.date < today) return;
+    const id = a.date + '_' + a.time;
+    if(have.has(id)) return;
+    have.add(id);
+    batch.set(db.collection('businesses').doc(bizId).collection('busy').doc(id), { date: a.date, time: a.time, apptId: a.id });
+    n++;
+  });
+  if(n) batch.commit().catch(e => console.error('Slot backfill failed', e));
+}
+
 function addAppointment(bizId, appt){
-  return db.collection('businesses').doc(bizId).collection('appointments').add(appt);
+  const bizRef = db.collection('businesses').doc(bizId);
+  const apptRef = bizRef.collection('appointments').doc();
+  const slotRef = bizRef.collection('busy').doc(appt.date + '_' + appt.time);
+  const batch = db.batch();
+  batch.set(apptRef, appt);
+  batch.set(slotRef, { date: appt.date, time: appt.time, apptId: apptRef.id });
+  return batch.commit(); // fails as a whole if somebody already took this slot
 }
 function updateAppointmentStatus(bizId, apptId, status){
-  return db.collection('businesses').doc(bizId).collection('appointments').doc(apptId).update({ status })
+  const bizRef = db.collection('businesses').doc(bizId);
+  const batch = db.batch();
+  batch.update(bizRef.collection('appointments').doc(apptId), { status });
+  if(status === 'cancelled'){ // free the slot again
+    const biz = getBusiness(bizId);
+    const a = biz && (biz.appointments || []).find(x => x.id === apptId);
+    const slot = a && (biz.busy || []).find(b => b.id === a.date + '_' + a.time);
+    if(slot && slot.apptId === apptId) batch.delete(bizRef.collection('busy').doc(slot.id));
+  }
+  return batch.commit()
     .catch(err => { console.error('Failed to update appointment', err); showToast('Could not update — check your connection', 'error'); });
 }
 
@@ -248,7 +304,7 @@ auth.onAuthStateChanged(fbUser => {
       } else {
         currentAuthUser = null;
         auth.signOut();
-        showToast("This account isn't linked to a business. Contact the admin.", 'error');
+        showToast("This account isn't linked to a business. Contact us on WhatsApp to get set up.", 'error');
       }
     }
     authReady = true;
@@ -355,6 +411,16 @@ function getRoute(){
   return { view: segments[0] || 'home', sub: segments[1] || null, params };
 }
 
+function showBootLoader(on){
+  const el = document.getElementById('boot-loader'); if(!el) return;
+  el.style.display = on ? 'flex' : 'none';
+  if(on){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('public-nav').style.display = 'none';
+    document.getElementById('public-footer').style.display = 'none';
+  }
+}
+
 function renderRoute(){
   const route = getRoute();
   const publicViews = ['home','pricing','discover','business','login'];
@@ -366,8 +432,10 @@ function renderRoute(){
   // existing session back to us.
   const user = getCurrentUser();
   if(isAppView && !authReady){
+    showBootLoader(true); // never leave a blank or stale page while the saved login is being restored
     return; // onAuthStateChanged will call renderRoute() again once it resolves
   }
+  showBootLoader(false);
   if(route.view === 'dashboard' && (!user || user.role !== 'owner')){
     navigate('login'); return;
   }
@@ -626,7 +694,7 @@ function renderBusinessProfile(id){
   const biz = getBusiness(id) || getBusinesses()[0];
   if(!biz){ document.getElementById('business-content').innerHTML = '<div class="container" style="padding:80px 0;"><div class="empty-state"><h4>Business not found</h4></div></div>'; return; }
   AppState.currentBusinessId = biz.id;
-  ensureAppointmentsListener(biz.id);
+  ensureBusyListener(biz.id); // public page: only taken slots, never customer details
   const open = isOpenNow(biz);
   const now = new Date();
   const todayName = now.toLocaleDateString('en-US', {weekday:'long'});
@@ -829,7 +897,8 @@ function renderBookingStep(){
     `;
   } else if(st.step === 3){
     const times = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
-    const takenTimes = (biz.appointments||[]).filter(a=>a.date===st.date && a.status!=='cancelled').map(a=>a.time);
+    const takenTimes = (biz.busy||[]).filter(b=>b.date===st.date).map(b=>b.time)
+      .concat((biz.appointments||[]).filter(a=>a.date===st.date && a.status!=='cancelled').map(a=>a.time));
     body = `
       <h3 style="margin-bottom:14px;">Select a time</h3>
       <div class="time-grid">
@@ -845,6 +914,7 @@ function renderBookingStep(){
       <div class="field" id="bf-name"><label>Name</label><input id="booking-name" maxlength="80" value="${esc(st.name)}" placeholder="Full name"><div class="err">Enter your name.</div></div>
       <div class="field" id="bf-phone"><label>Phone number</label><input id="booking-phone" maxlength="20" value="${esc(st.phone)}" placeholder="07XX XXX XXX"><div class="err">Enter a valid phone number.</div><div class="text-muted" style="font-size:12px;margin-top:6px;">The business may confirm your appointment on WhatsApp using this number.</div></div>
       <div class="field"><label>Email (optional)</label><input id="booking-email" maxlength="120" value="${esc(st.email)}" placeholder="you@example.com"></div>
+      <div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;"><label>Website</label><input id="booking-website" tabindex="-1" autocomplete="off" maxlength="60"></div>
     `;
   } else if(st.step === 5){
     const svc = biz.services.find(s=>s.id===st.serviceId);
@@ -864,12 +934,14 @@ function renderBookingStep(){
     const bizNum = biz.whatsapp ? waNumber(biz.whatsapp) : '';
     const myMsg = 'Hi, this is ' + st.name + '. I just booked ' + (sSvc.name || 'an appointment') + ' on ' + new Date(st.date+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', day:'numeric', month:'long'}) + ' at ' + to12h(st.time) + '. Please confirm if it is available.';
     const waBtn = (bizNum && checkFeatureAccess('socialWhatsapp', biz.plan)) ? `<a class="btn btn-outline mt16" target="_blank" rel="noopener" href="https://wa.me/${bizNum}?text=${encodeURIComponent(myMsg)}">${ICON.chat} Message ${esc(biz.name)} on WhatsApp</a><br>` : '';
+    const calBtn = (st.date && st.time && sSvc.name) ? `<a class="btn btn-outline mt16" download="appointment.ics" href="data:text/calendar;charset=utf-8,${encodeURIComponent(buildIcs(biz, sSvc, st))}">${ICON.calendar} Add to calendar</a><br>` : '';
     document.getElementById('modal-box').innerHTML = `
       <div class="modal-body booking-success">
         <div class="ico">✓</div>
         <h3>Appointment Request Sent</h3>
-        <p class="text-muted mt8">Your appointment has been booked with <b>${esc(biz.name)}</b>. They'll confirm it shortly, possibly on WhatsApp.</p>
+        <p class="text-muted mt8">Your appointment has been booked with <b>${esc(biz.name)}</b>. They'll confirm it shortly, usually on WhatsApp.</p>
         ${waBtn}
+        ${calBtn}
         <button class="btn btn-primary mt24" onclick="closeModal()">Done</button>
       </div>
     `;
@@ -919,6 +991,7 @@ function wireBookingStep(biz){
       st.name = document.getElementById('booking-name').value.trim();
       st.phone = document.getElementById('booking-phone').value.trim();
       st.email = (document.getElementById('booking-email')||{}).value || '';
+      st.trap = (document.getElementById('booking-website')||{}).value || '';
       if(!bookingCanProceed()){ showToast('Please enter your name, a valid phone number and (if given) a valid email', 'error'); return; }
     }
     if(st.step === 5){
@@ -941,6 +1014,16 @@ function wireBookingStep(biz){
 function confirmBooking(biz){
   const st = AppState.booking;
   const svc = biz.services.find(s=>s.id===st.serviceId);
+  const nb = () => document.getElementById('booking-next');
+  // Bots fill every field, including the hidden one. Pretend it worked and store nothing.
+  if(st.trap){ st.step = 'success'; renderBookingStep(); return; }
+  // Light per-device limit. The real limits are: one booking per time slot, and Firebase App Check.
+  try {
+    const now = Date.now();
+    const recent = JSON.parse(localStorage.getItem('aura_bookings') || '[]').filter(t => now - t < 3600000);
+    if(recent.length >= 5){ showToast('You have made several bookings in the last hour. Please try again later.', 'error'); if(nb()) nb().disabled = false; return; }
+    recent.push(now); localStorage.setItem('aura_bookings', JSON.stringify(recent));
+  } catch(e) { /* private mode: skip the limit */ }
   addAppointment(biz.id, {
     customerName: st.name, customerPhone: st.phone, customerEmail: st.email || '',
     serviceId: svc.id, serviceName: svc.name, price: svc.price,
@@ -950,8 +1033,13 @@ function confirmBooking(biz){
     renderBookingStep();
   }).catch(err=>{
     console.error('Booking failed', err);
+    if(err && err.code === 'permission-denied'){
+      showToast('Sorry, that time was just taken. Please choose another time.', 'error');
+      st.time = ''; st.step = 3; renderBookingStep();
+      return;
+    }
     showToast('Could not submit your booking — check your internet connection', 'error');
-    const nb = document.getElementById('booking-next'); if(nb) nb.disabled = false;
+    if(nb()) nb().disabled = false;
   });
 }
 
@@ -1020,6 +1108,80 @@ document.querySelectorAll('.pw-toggle').forEach(btn=>{
   });
 });
 
+
+/* ---- Connect Google to the account you are already logged into (guaranteed link, same account) ---- */
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('#link-google-btn');
+  if(!btn) return;
+  const cu = auth.currentUser;
+  if(!cu) return;
+  btn.disabled = true;
+  // linkWithPopup is called straight from the tap so phone browsers don't block the window
+  cu.linkWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => {
+    showToast('Google connected. You can now log in with Google.');
+    renderRoute();
+  }).catch(err => {
+    console.error('Google link failed', err);
+    if(['auth/popup-closed-by-user','auth/cancelled-popup-request','auth/user-cancelled'].includes(err.code)) return;
+    const msgs = {
+      'auth/credential-already-in-use': 'That Google account is already connected to another Aura account.',
+      'auth/provider-already-linked': 'Google is already connected to this account.',
+      'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
+      'auth/operation-not-allowed': 'Google sign-in is not switched on yet. Please contact us.',
+      'auth/unauthorized-domain': 'This web address is not approved for Google sign-in yet. Please contact us.',
+      'auth/network-request-failed': 'Could not reach Google - check your internet connection.'
+    };
+    showToast(msgs[err.code] || ('Could not connect Google (' + (err.code || err.message || 'unknown') + '). Please try again.'), 'error');
+  }).finally(() => { btn.disabled = false; });
+});
+
+/* ---- Sign in with Google ----
+   Role rules are unchanged: a Google account only gets in if its Firebase uid is the admin or is
+   linked to a business (Firebase links Google to an existing password account with the same email). */
+function applyPersistence(){
+  const remember = !!(document.getElementById('login-remember') || {}).checked;
+  return auth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION).catch(() => {});
+}
+(function wireGoogleSignIn(){
+  const btn = document.getElementById('google-signin-btn');
+  const remember = document.getElementById('login-remember');
+  if(remember) remember.addEventListener('change', applyPersistence);
+  applyPersistence();
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    if(/FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|musical_ly/i.test(navigator.userAgent)){
+      showToast('Google blocks sign-in inside this app. Open this page in Chrome or Safari and try again.', 'error'); return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    btn.disabled = true;
+    // signInWithPopup is called straight from the tap so phone browsers don't block the window
+    auth.signInWithPopup(provider).then(cred => {
+      whenCacheReady(() => {
+        const isAdmin = cred.user.uid === ADMIN_UID;
+        const biz = isAdmin ? null : getBusinesses().find(b => b.ownerUid === cred.user.uid);
+        if(!isAdmin && !biz) return; // the auth listener signs out and explains
+        showToast('Welcome back' + (isAdmin ? '' : ', ' + biz.name) + '!');
+        navigate(isAdmin ? 'admin' : 'dashboard');
+      });
+    }).catch(err => {
+      console.error('Google sign-in failed', err);
+      const quiet = ['auth/popup-closed-by-user','auth/cancelled-popup-request','auth/user-cancelled'];
+      if(quiet.includes(err.code)) return;
+      const msgs = {
+        'auth/popup-blocked': 'Your browser blocked the Google window. Allow pop-ups for this site and try again.',
+        'auth/operation-not-allowed': 'Google sign-in is not switched on yet. Please contact us.',
+        'auth/unauthorized-domain': 'This web address is not approved for Google sign-in yet. Please contact us.',
+        'auth/network-request-failed': 'Could not reach Google - check your internet connection.',
+        'auth/web-storage-unsupported': 'Your browser is blocking cookies or storage. Turn off tracking protection for this site, or try Chrome.',
+        'auth/operation-not-supported-in-this-environment': 'Google sign-in needs the site opened from a web address (http or https), not a file.',
+        'auth/account-exists-with-different-credential': 'This email already has a password account. Log in with your password, then open Settings and tap Connect Google.'
+      };
+      showToast(msgs[err.code] || ('Google sign-in failed (' + (err.code || err.message || 'unknown') + '). Please try again.'), 'error');
+    }).finally(() => { btn.disabled = false; });
+  });
+})();
+
 document.getElementById('forgot-pw-link').addEventListener('click', (e)=>{
   e.preventDefault();
   const email = document.getElementById('login-id').value.trim();
@@ -1066,7 +1228,7 @@ function renderDashboard(section){
     document.getElementById('dash-content').innerHTML = '<p class="text-muted">Loading your business…</p>';
     return;
   }
-  ensureAppointmentsListener(biz.id);
+  ensureAppointmentsListener(biz.id); ensureBusyListener(biz.id);
 
   document.getElementById('dash-title').textContent = DASH_TITLES[section];
   document.getElementById('sidebar-plan-label').textContent = PLANS[biz.plan].label;
@@ -1501,20 +1663,42 @@ function waNumber(raw){
   else if(d.length === 9) d = '254' + d;
   return /^254\d{9}$/.test(d) ? d : '';
 }
+/* A calendar file the customer can tap to save the appointment on their phone. */
+function buildIcs(biz, svc, st){
+  const pad = n => String(n).padStart(2,'0');
+  const t = x => String(x||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');
+  const [y,m,d] = st.date.split('-').map(Number), [hh,mm] = st.time.split(':').map(Number);
+  const start = new Date(y, m-1, d, hh, mm);
+  const end = new Date(start.getTime() + (parseInt(svc.duration,10) || 60) * 60000);
+  const f = dt => dt.getFullYear() + pad(dt.getMonth()+1) + pad(dt.getDate()) + 'T' + pad(dt.getHours()) + pad(dt.getMinutes()) + '00';
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Aura//Booking//EN','BEGIN:VEVENT',
+    'UID:' + Date.now() + '-' + biz.id + '@aura',
+    'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z',
+    'DTSTART:' + f(start), 'DTEND:' + f(end),
+    'SUMMARY:' + t((svc.name || 'Appointment') + ' at ' + biz.name),
+    'LOCATION:' + t(biz.location),
+    'DESCRIPTION:' + t('Booked on Aura. The business will confirm your appointment.'),
+    'END:VEVENT','END:VCALENDAR'].join('\r\n');
+}
+
 function confirmWaLink(biz, a){
   const num = waNumber(a.customerPhone);
   if(!num) return '';
   const when = new Date(a.date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'long' }) + ' at ' + to12h(a.time);
   const first = String(a.customerName || '').trim().split(/\s+/)[0] || 'there';
-  const msg = 'Hi ' + first + ', this is ' + biz.name + '. We received your booking for ' + a.serviceName + ' on ' + when + '. Is that time still good for you? Please reply YES to confirm, or tell us a better time.';
+  const approved = a.status === 'upcoming' || a.status === 'confirmed';
+  const msg = approved
+    ? 'Hi ' + first + ', your appointment at ' + biz.name + ' is confirmed: ' + a.serviceName + ' on ' + when + '. See you then! Reply here if you need to change it.'
+    : 'Hi ' + first + ', this is ' + biz.name + '. We received your booking for ' + a.serviceName + ' on ' + when + '. Is that time still good for you? Please reply YES to confirm, or tell us a better time.';
   return 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg);
 }
 function waConfirmButton(a, biz){
   if(!biz || !checkFeatureAccess('whatsappConfirm', biz.plan)) return '';
   const link = confirmWaLink(biz, a);
   if(!link) return '';
-  const label = a.status === 'pending' ? 'Confirm on WhatsApp' : 'Message';
-  return `<a class="btn btn-sm btn-outline" target="_blank" rel="noopener" href="${esc(link)}">${ICON.chat} ${label}</a>`;
+  const approved = a.status === 'upcoming' || a.status === 'confirmed';
+  const label = approved ? 'Send approval' : 'Confirm on WhatsApp';
+  return `<a class="btn btn-sm ${approved ? 'btn-accent' : 'btn-outline'}" target="_blank" rel="noopener" href="${esc(link)}">${ICON.chat} ${label}</a>`;
 }
 function apptActionButtons(a, biz){
   if(a.status==='pending') return waConfirmButton(a, biz) + `<button class="btn btn-sm btn-primary" data-appt-action="accept:${esc(a.id)}">Accept</button><button class="btn btn-sm btn-danger" data-appt-action="reject:${esc(a.id)}">Reject</button>`;
@@ -1786,13 +1970,21 @@ function wireUpgradeModal(biz){
 }
 
 /* ---- Settings ---- */
+function googleLinkedEmail(){
+  const cu = auth.currentUser;
+  const p = cu && (cu.providerData || []).find(x => x && x.providerId === 'google.com');
+  return p ? (p.email || 'connected') : '';
+}
+
 function renderDashSettings(biz){
   const user = getCurrentUser();
+  const gEmail = googleLinkedEmail();
   return `
     <div class="panel settings-section">
       <div class="panel-head"><h3>Account</h3></div>
       <div class="settings-row"><div class="stxt"><b>Name</b><span>${esc(user?user.name:'Owner')}</span></div><button class="btn btn-outline btn-sm" data-toast="Editing your name isn't available yet.">Edit</button></div>
       <div class="settings-row"><div class="stxt"><b>Email</b><span>${esc(user?user.email:'—')}</span></div><button class="btn btn-outline btn-sm" data-toast="Editing your email isn't available yet.">Edit</button></div>
+      <div class="settings-row"><div class="stxt"><b>Google sign-in</b><span>${gEmail ? 'Connected: ' + esc(gEmail) : 'Not connected. Connect it to log in with one tap.'}</span></div>${gEmail ? '<span class="badge badge-completed">Connected</span>' : '<button class="btn btn-outline btn-sm" id="link-google-btn">Connect Google</button>'}</div>
       <div class="settings-row"><div class="stxt"><b>Password</b><span>••••••••</span></div><button class="btn btn-outline btn-sm" data-toast="Password changes aren't available yet.">Change</button></div>
     </div>
     <div class="panel settings-section">
@@ -1945,6 +2137,30 @@ const ADMIN_NAV = [
 const ADMIN_TITLES = { overview:'Platform overview', businesses:'Businesses' };
 let adminSearch = '', adminPlanFilter = 'All', adminStatusFilter = 'All';
 
+/* Owner emails live in businesses/{id}/private/owner (admin-only). Older businesses still have the
+   email in the public document; the first time the admin opens the Businesses list it is moved. */
+const adminOwnerEmails = {}, adminEmailsTried = {};
+function adminLoadOwnerEmails(){
+  const u = auth.currentUser;
+  if(!u || u.uid !== ADMIN_UID) return;
+  const todo = getBusinesses().filter(b => !adminEmailsTried[b.id]);
+  if(!todo.length) return;
+  todo.forEach(b => { adminEmailsTried[b.id] = true; });
+  Promise.all(todo.map(b => {
+    const ref = db.collection('businesses').doc(b.id);
+    return ref.collection('private').doc('owner').get().then(d => {
+      if(d.exists){ adminOwnerEmails[b.id] = d.data().ownerEmail; return; }
+      if(b.ownerEmail){
+        adminOwnerEmails[b.id] = b.ownerEmail;
+        const batch = db.batch();
+        batch.set(ref.collection('private').doc('owner'), { ownerEmail: b.ownerEmail });
+        batch.update(ref, { ownerEmail: firebase.firestore.FieldValue.delete() });
+        return batch.commit();
+      }
+    }).catch(err => console.error('Owner email lookup failed', err));
+  })).then(() => renderRoute());
+}
+
 function renderAdmin(section){
   section = ADMIN_TITLES[section] ? section : 'overview';
   AppState.adminSection = section;
@@ -1956,6 +2172,7 @@ function renderAdmin(section){
 
   const content = document.getElementById('admin-content');
   content.innerHTML = section === 'overview' ? renderAdminOverview() : renderAdminBusinesses();
+  if(section === 'businesses') adminLoadOwnerEmails();
   wireAdminSectionEvents(section);
 }
 
@@ -2018,7 +2235,7 @@ function renderAdminBusinesses(){
           ${list.map(b=>`
             <tr>
               <td><b>${esc(b.name)}</b></td>
-              <td>${esc(b.ownerEmail || '—')}</td>
+              <td>${esc(adminOwnerEmails[b.id] || b.ownerEmail || '—')}</td>
               <td>${esc(b.category)}</td>
               <td style="text-transform:capitalize;">${esc(b.plan)}</td>
               <td><span class="badge badge-confirmed" style="text-transform:capitalize;">${esc((b.subscription&&b.subscription.status)||'active')}</span></td>
@@ -2128,7 +2345,7 @@ function wireAdminAddBusinessModal(){
     const ownerPassword = document.getElementById('ab-owner-password').value;
 
     if(!name){ showToast('Please enter a business name', 'error'); return; }
-    const emailTaken = getBusinesses().some(b => (b.ownerEmail||'').toLowerCase() === ownerEmail);
+    const emailTaken = getBusinesses().some(b => (b.ownerEmail||'').toLowerCase() === ownerEmail) || Object.values(adminOwnerEmails).some(e => (e||'').toLowerCase() === ownerEmail);
     let ok = true;
     if(!validEmail(ownerEmail) || isAdminEmail(ownerEmail) || emailTaken){
       setFieldError('f-ab-owner-email', true);
@@ -2148,7 +2365,7 @@ function wireAdminAddBusinessModal(){
       const bizId = slugify(name) + '-' + Math.floor(Math.random()*900+100);
       const start = new Date();
       const newBiz = {
-        id: bizId, name, category, emoji: categoryEmoji(category), ownerEmail, ownerUid,
+        id: bizId, name, category, emoji: categoryEmoji(category), ownerUid,
         location, description: 'Tell customers about this business — edit it from the business dashboard.',
         rating:0, reviewCount:0, priceFrom:0,
         coverColor:'linear-gradient(135deg,#1B3550,#0D1B2A)', logoColor:'#FF9F1C',
@@ -2164,7 +2381,12 @@ function wireAdminAddBusinessModal(){
         gallery:[], services:[], reviews:[], staff:[],
         joined: start.toISOString().slice(0,10)
       };
-      return db.collection('businesses').doc(bizId).set(newBiz).then(()=>{
+      const bizRef = db.collection('businesses').doc(bizId);
+      const createBatch = db.batch();
+      createBatch.set(bizRef, newBiz);
+      createBatch.set(bizRef.collection('private').doc('owner'), { ownerEmail }); // never public
+      adminOwnerEmails[bizId] = ownerEmail;
+      return createBatch.commit().then(()=>{
         closeModal();
         showToast('Business added on the ' + PLANS[plan].label + ' plan — owner logs in with ' + ownerEmail);
         adminSearch = ''; adminPlanFilter = 'All';
@@ -2204,5 +2426,6 @@ document.getElementById('footer-admin-link').addEventListener('click', (e)=>{
 (function init(){
   if(!window.location.hash) window.location.hash = 'home';
   startBusinessListener();
+  setTimeout(()=>{ const m = document.getElementById('boot-msg'); if(!authReady && m) m.textContent = 'Taking longer than usual - check your internet connection'; }, 12000);
   renderRoute(); // first pass renders public pages immediately; the listener + auth state re-render again once ready
 })();
