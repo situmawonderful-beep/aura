@@ -41,6 +41,9 @@ function whenCacheReady(cb){
 }
 
 function getBusinesses(){ return businessCache; }
+/* A suspended business is hidden from the public, cannot take bookings, and sees a notice in its dashboard. */
+function isSuspended(b){ return !!(b && b.subscription && b.subscription.status === 'suspended'); }
+function getPublicBusinesses(){ return businessCache.filter(b => !isSuspended(b)); }
 function getBusiness(id){ return businessCache.find(b => b.id === id); }
 
 function saveBusiness(updated){
@@ -497,7 +500,8 @@ document.addEventListener('click', (e)=>{
    --------------------------------------------------------------------- */
 function renderHome(){
   const grid = document.getElementById('features-grid');
-  grid.innerHTML = FEATURE_CATALOGUE.map(f => `
+  const SHOWN = ['booking','whatsapp','gallery','customers','analytics','customPage'];
+  grid.innerHTML = FEATURE_CATALOGUE.filter(f => SHOWN.includes(f.key)).map(f => `
     <div class="feature-card">
       <div class="fi">${f.icon}</div>
       <h4>${f.label}</h4>
@@ -511,7 +515,7 @@ function renderHome(){
 function renderHomeShopsRow(){
   const row = document.getElementById('home-shops-row');
   if(!row) return;
-  const businesses = getBusinesses();
+  const businesses = getPublicBusinesses();
   if(!businesses.length){ row.innerHTML = '<p class="text-muted" style="padding:8px 0;">New businesses are joining Aura every week — check back soon.</p>'; return; }
   row.innerHTML = businesses.map(b => `
     <div class="shop-card">
@@ -624,7 +628,7 @@ function renderBizGrid(){
   const grid = document.getElementById('biz-grid');
   const q = AppState.discoverSearch.trim().toLowerCase();
   const cat = AppState.discoverFilter;
-  let list = getBusinesses().filter(b=>{
+  let list = getPublicBusinesses().filter(b=>{
     const matchCat = cat === 'All' || b.category === cat;
     const matchQ = !q || b.name.toLowerCase().includes(q) || b.category.toLowerCase().includes(q) || (b.services||[]).some(s=>s.name.toLowerCase().includes(q));
     return matchCat && matchQ;
@@ -691,8 +695,15 @@ function renderSocialButtons(biz, excludeKeys){
 }
 
 function renderBusinessProfile(id){
-  const biz = getBusiness(id) || getBusinesses()[0];
+  const biz = getBusiness(id) || (id ? null : getPublicBusinesses()[0]);
   if(!biz){ document.getElementById('business-content').innerHTML = '<div class="container" style="padding:80px 0;"><div class="empty-state"><h4>Business not found</h4></div></div>'; return; }
+  const viewer = auth.currentUser;
+  const privileged = !!viewer && (viewer.uid === ADMIN_UID || viewer.uid === biz.ownerUid);
+  if(isSuspended(biz) && !privileged){
+    document.getElementById('business-content').innerHTML = '<div class="container" style="padding:90px 0;"><div class="empty-state"><h4>This business is temporarily unavailable</h4><p>Please check back soon, or browse other businesses on Aura.</p><a class="btn btn-primary mt16" href="#discover">Browse businesses</a></div></div>';
+    return;
+  }
+  const suspendedNotice = isSuspended(biz) ? '<div class="container" style="padding-top:16px;"><div class="suspend-banner"><b>This business is suspended.</b> Only you can see this page. Customers see &ldquo;temporarily unavailable&rdquo; and cannot book.</div></div>' : '';
   AppState.currentBusinessId = biz.id;
   ensureBusyListener(biz.id); // public page: only taken slots, never customer details
   const open = isOpenNow(biz);
@@ -701,6 +712,7 @@ function renderBusinessProfile(id){
   const bookingEnabled = checkFeatureAccess('booking', biz.plan);
 
   const html = `
+    ${suspendedNotice}
     <div class="biz-header-cover" style="${coverStyle(biz)}"></div>
     <div class="container biz-header-wrap">
       <div class="biz-header-inner">
@@ -809,6 +821,7 @@ function renderBusinessProfile(id){
   });
 
   const openBooking = ()=> {
+    if(isSuspended(biz)){ showToast('This business is not taking bookings right now.', 'error'); return; }
     if(!bookingEnabled){
       openModal(upgradeNeededModal('booking', biz));
       return;
@@ -828,6 +841,7 @@ function renderBusinessProfile(id){
   });
   document.querySelectorAll('[data-book-service]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      if(isSuspended(biz)){ showToast('This business is not taking bookings right now.', 'error'); return; }
       if(!bookingEnabled){ openModal(upgradeNeededModal('booking', biz)); return; }
       openBookingModal(biz, btn.getAttribute('data-book-service'));
     });
@@ -852,6 +866,7 @@ function upgradeNeededModal(feature, biz){
    14. BOOKING FLOW (customer-facing)
    --------------------------------------------------------------------- */
 function openBookingModal(biz, preselectServiceId){
+  if(isSuspended(biz)){ showToast('This business is not taking bookings right now.', 'error'); return; }
   AppState.booking = { bizId: biz.id, step:1, serviceId: preselectServiceId || null, date:null, time:null, name:'', phone:'', email:'' };
   openModal('');
   renderBookingStep();
@@ -1256,6 +1271,11 @@ function renderDashboard(section){
   else if(section === 'analytics') content.innerHTML = checkFeatureAccess('analytics', biz.plan) ? renderDashAnalytics(biz) : renderLockedFeature('Analytics', 'pro');
   else if(section === 'subscription') content.innerHTML = renderDashSubscription(biz);
   else if(section === 'settings') content.innerHTML = renderDashSettings(biz);
+
+  if(isSuspended(biz)){
+    const msg = 'Hi, my business ' + biz.name + ' (' + biz.id + ') on Aura is suspended. Please help me get it reinstated.';
+    content.insertAdjacentHTML('afterbegin', '<div class="suspend-banner"><b>Your business is suspended.</b> Your page is hidden from customers and bookings are switched off. <a href="https://wa.me/254115506649?text=' + encodeURIComponent(msg) + '" target="_blank" rel="noopener">Message us on WhatsApp</a> to get reinstated.</div>');
+  }
 
   wireDashSectionEvents(section, biz);
 }
@@ -2287,6 +2307,7 @@ function wireAdminSectionEvents(section){
   document.querySelectorAll('[data-admin-suspend]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const fresh = getBusiness(btn.getAttribute('data-admin-suspend'));
+      if(fresh && !isSuspended(fresh) && !window.confirm('Suspend ' + fresh.name + '? Their page will be hidden from customers and bookings will be switched off.')) return;
       fresh.subscription = fresh.subscription || {};
       fresh.subscription.status = fresh.subscription.status === 'suspended' ? 'active' : 'suspended';
       saveBusiness(fresh);

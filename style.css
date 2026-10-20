@@ -687,3 +687,10 @@ input[type=time]{ min-width:0; }
 .checkbox-row{ white-space:nowrap; }
 .form-inline{ flex-wrap:wrap; gap:8px 14px; }
 #forgot-pw-link{ white-space:nowrap; }
+
+/* ================= SUSPENSION NOTICES + 6-CARD FEATURE GRID ================= */
+.suspend-banner{ background:#FBE4E0; color:#7A1F16; border:1px solid #E8B4AD; border-left:4px solid var(--danger); padding:14px 18px; margin:0 0 20px; border-radius:var(--radius-md); font-size:14px; line-height:1.5; }
+.suspend-banner a{ color:#7A1F16; font-weight:700; text-decoration:underline; }
+#features-grid{ grid-template-columns: repeat(3,1fr); }
+@media (max-width:900px){ #features-grid{ grid-template-columns: repeat(2,1fr); } }
+@media (max-width:560px){ #features-grid{ grid-template-columns: 1fr; } }
