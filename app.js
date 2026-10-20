@@ -68,7 +68,7 @@ function startBusinessListener(){
     });
     cacheReady = true;
     cacheReadyWaiters.splice(0).forEach(cb => cb());
-    renderRoute();
+    refreshRoute();
   }, err => {
     console.error('Firestore listener error', err);
     showToast('Could not load businesses — check your internet connection', 'error');
@@ -91,7 +91,7 @@ function ensureAppointmentsListener(bizId){
       biz.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       loadedFlags[bizId + ':appts'] = true;
       maybeBackfillBusy(bizId);
-      renderRoute();
+      refreshRoute();
     }, err => console.error('Appointments listener error', err));
 }
 
@@ -109,7 +109,7 @@ function ensureBusyListener(bizId){
       biz.busy = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       loadedFlags[bizId + ':busy'] = true;
       maybeBackfillBusy(bizId);
-      renderRoute();
+      refreshRoute();
     }, err => console.error('Busy-slot listener error', err));
 }
 
@@ -121,7 +121,7 @@ function maybeBackfillBusy(bizId){
   if(!biz || !u || (biz.ownerUid !== u.uid && u.uid !== ADMIN_UID)) return;
   busyBackfilled[bizId] = true;
   const have = new Set((biz.busy || []).map(b => b.id));
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISO();
   const batch = db.batch(); let n = 0;
   (biz.appointments || []).forEach(a => {
     if(a.status === 'cancelled' || a.status === 'completed' || a.date < today) return;
@@ -265,18 +265,18 @@ const COMPARE_FEATURES = [
   {label:'Number of services', free:'3', starter:'10', business:'25', pro:'Unlimited'},
   {label:'Photo gallery', free:'2 photos', starter:'8 photos', business:'16 photos', pro:'Unlimited'},
   {label:'WhatsApp contact button', free:true, starter:true, business:true, pro:true},
-  {label:'Custom business URL', free:false, starter:true, business:true, pro:true},
+  {label:'Custom business URL (coming soon)', free:false, starter:true, business:true, pro:true},
   {label:'TikTok button', free:false, starter:true, business:true, pro:true},
   {label:'Instagram button', free:false, starter:false, business:true, pro:true},
-  {label:'Basic business insights', free:false, starter:true, business:true, pro:true},
+  {label:'Basic business insights (coming soon)', free:false, starter:true, business:true, pro:true},
   {label:'Online appointment booking', free:false, starter:false, business:true, pro:true},
   {label:'Booking dashboard', free:false, starter:false, business:true, pro:true},
   {label:'WhatsApp booking confirmations', free:false, starter:false, business:true, pro:true},
-  {label:'Customer reviews', free:false, starter:false, business:true, pro:true},
+  {label:'Customer reviews (coming soon)', free:false, starter:false, business:true, pro:true},
   {label:'Staff management', free:false, starter:false, business:false, pro:true},
   {label:'Advanced analytics', free:false, starter:false, business:false, pro:true},
-  {label:'Promotions & discounts', free:false, starter:false, business:false, pro:true},
-  {label:'Remove Aura branding', free:false, starter:false, business:false, pro:true},
+  {label:'Promotions & discounts (coming soon)', free:false, starter:false, business:false, pro:true},
+  {label:'Remove Aura branding (coming soon)', free:false, starter:false, business:false, pro:true},
   {label:'Priority support', free:false, starter:false, business:false, pro:true},
 ];
 
@@ -292,6 +292,7 @@ let authReady = false;
 auth.onAuthStateChanged(fbUser => {
   if(!fbUser){
     currentAuthUser = null;
+    stopApplicationsListener();
     authReady = true;
     updateAuthNav();
     renderRoute();
@@ -300,6 +301,7 @@ auth.onAuthStateChanged(fbUser => {
   whenCacheReady(() => {
     if(fbUser.uid === ADMIN_UID){
       currentAuthUser = { uid: fbUser.uid, email: fbUser.email, role:'admin', name:'Platform Admin' };
+      startApplicationsListener();
     } else {
       const biz = getBusinesses().find(b => b.ownerUid === fbUser.uid);
       if(biz){
@@ -334,6 +336,7 @@ function createOwnerAccount(email, password){
     .catch(err => secondaryApp.delete().then(() => { throw err; }));
 }
 
+function localISO(d){ d = d || new Date(); const p = n => String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
 function slugify(s){ return (s||'business').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
 function categoryEmoji(cat){ return ''; } // emoji no longer used; the field is kept (empty) so the data shape is unchanged
 
@@ -396,6 +399,7 @@ function closeModal(){
   document.getElementById('modal-box').innerHTML = '';
   AppState.booking = null;
 }
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && document.getElementById('modal-overlay').classList.contains('open')) closeModal(); });
 document.getElementById('modal-overlay').addEventListener('click', (e)=>{
   if(e.target.id === 'modal-overlay') closeModal();
 });
@@ -424,6 +428,12 @@ function showBootLoader(on){
   }
 }
 
+let lastRenderedHash = null;
+function refreshRoute(){
+  const ae = document.activeElement;
+  if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.closest('#dash-content,#admin-content,#view-register')) return;
+  renderRoute();
+}
 function renderRoute(){
   const route = getRoute();
   const publicViews = ['home','pricing','discover','business','login'];
@@ -459,13 +469,14 @@ function renderRoute(){
   });
   document.getElementById('mobile-nav').classList.remove('open');
 
-  window.scrollTo({top:0, behavior:'instant' in window ? 'instant' : 'auto'});
+  if(window.location.hash !== lastRenderedHash){ window.scrollTo({top:0, behavior:'instant'}); lastRenderedHash = window.location.hash; }
 
   if(target === 'home') renderHome();
   else if(target === 'pricing') renderPricing();
   else if(target === 'discover') renderDiscover();
   else if(target === 'business') renderBusinessProfile(route.params.get('id') || AppState.currentBusinessId || '');
   else if(target === 'login') { /* static */ }
+  else if(target === 'register') renderRegister(route.params);
   else if(target === 'dashboard') renderDashboard(route.sub || AppState.dashSection);
   else if(target === 'admin') renderAdmin(route.sub || AppState.adminSection);
 
@@ -484,7 +495,7 @@ function updateAuthNav(){
     signupBtn.textContent = 'Log out'; signupBtn.setAttribute('href','#'); signupBtn.removeAttribute('target'); signupBtn.removeAttribute('rel'); signupBtn.onclick = (e)=>{ e.preventDefault(); logoutUser(); navigate('home'); showToast('Logged out'); };
   } else {
     loginBtn.textContent = 'Log in'; loginBtn.setAttribute('href','#login'); loginBtn.setAttribute('data-nav','login'); loginBtn.onclick = null;
-    signupBtn.textContent = 'List Your Business'; signupBtn.setAttribute('href','https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura'); signupBtn.setAttribute('target','_blank'); signupBtn.setAttribute('rel','noopener'); signupBtn.removeAttribute('data-nav'); signupBtn.onclick = null;
+    signupBtn.textContent = 'List Your Business'; signupBtn.setAttribute('href','#register'); signupBtn.removeAttribute('target'); signupBtn.removeAttribute('rel'); signupBtn.removeAttribute('data-nav'); signupBtn.onclick = null;
   }
 }
 
@@ -555,7 +566,7 @@ function renderPricing(){
         <ul class="price-features">
           ${pricingBullets(pid).map(b=>`<li><span class="ck">✓</span>${esc(b)}</li>`).join('')}
         </ul>
-        <a href="#signup" data-nav="signup" class="btn ${popular?'btn-accent':'btn-outline'} btn-block">${pid==='free'?'Get Started Free':'Choose '+p.label}</a>
+        <a href="#register?plan=${pid}" class="btn ${popular?'btn-accent':'btn-outline'} btn-block">${pid==='free'?'Get Started Free':'Choose '+p.label}</a>
       </div>
     `;
   }).join('');
@@ -569,9 +580,9 @@ function renderPricing(){
 function pricingBullets(pid){
   const base = {
     free: ['Business profile & page', '3 services listed', '2 photos', 'WhatsApp button', 'Opening hours & location'],
-    starter: ['Everything in Free', '10 services listed', '8 photos', 'Custom business URL', 'WhatsApp + TikTok buttons', 'Basic business insights'],
-    business: ['Everything in Starter', '25 services listed', 'WhatsApp + TikTok + Instagram', 'Online appointment booking', 'Booking dashboard', 'WhatsApp booking confirmations', 'Customer reviews'],
-    pro: ['Everything in Business', 'Unlimited services & photos', 'Staff management', 'Advanced analytics', 'Promotions & discounts', 'Remove Aura branding']
+    starter: ['Everything in Free', '10 services listed', '8 photos', 'Custom business URL (coming soon)', 'WhatsApp + TikTok buttons', 'Basic business insights (coming soon)'],
+    business: ['Everything in Starter', '25 services listed', 'WhatsApp + TikTok + Instagram', 'Online appointment booking', 'Booking dashboard', 'WhatsApp booking confirmations', 'Customer reviews (coming soon)'],
+    pro: ['Everything in Business', 'Unlimited services & photos', 'Staff management', 'Advanced analytics', 'Promotions & discounts (coming soon)', 'Remove Aura branding (coming soon)']
   };
   return base[pid];
 }
@@ -642,7 +653,7 @@ function renderBizGrid(){
   grid.innerHTML = list.map(b=>{
     const open = isOpenNow(b);
     return `
-    <div class="biz-card" data-biz="${esc(b.id)}">
+    <div class="biz-card" data-biz="${esc(b.id)}" tabindex="0" role="link">
       <div class="biz-cover" style="${coverStyle(b)}">
         <span class="biz-status ${open?'open':'closed'}">${open?'Open now':'Closed'}</span>
         <div class="biz-logo" style="${logoStyle(b)}"></div>
@@ -663,10 +674,9 @@ function renderBizGrid(){
   }).join('');
 
   grid.querySelectorAll('.biz-card').forEach(card=>{
-    card.addEventListener('click', ()=>{
-      AppState.currentBusinessId = card.getAttribute('data-biz');
-      navigate('business?id='+card.getAttribute('data-biz'));
-    });
+    const go = ()=>{ AppState.currentBusinessId = card.getAttribute('data-biz'); navigate('business?id='+card.getAttribute('data-biz')); };
+    card.addEventListener('click', go);
+    card.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); go(); } });
   });
 }
 
@@ -814,7 +824,8 @@ function renderBusinessProfile(id){
 
   // profile sub-nav active state on click (simple, no scroll-spy needed for prototype)
   document.querySelectorAll('.profile-nav a').forEach(a=>{
-    a.addEventListener('click', ()=>{
+    a.addEventListener('click', (e)=>{
+      e.preventDefault(); const t = document.querySelector(a.getAttribute('href')); if(t) t.scrollIntoView({behavior:'smooth', block:'start'});
       document.querySelectorAll('.profile-nav a').forEach(x=>x.classList.remove('active'));
       a.classList.add('active');
     });
@@ -881,6 +892,18 @@ function nextAvailableDates(){
   return days;
 }
 
+function slotsFor(biz, iso, svc){
+  const day = new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'});
+  const h = (biz.hours||[]).find(x=>x.day===day);
+  if(!h || h.open==='Closed') return [];
+  const toM = t => { const [a,b] = t.split(':').map(Number); return a*60+b; };
+  const dur = parseInt(svc && svc.duration,10) || 60, now = new Date(), isToday = iso === localISO(now), nowM = now.getHours()*60+now.getMinutes(), out = [];
+  for(let m = toM(h.open); m+dur <= toM(h.close); m += 60){
+    if(isToday && m <= nowM) continue;
+    out.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));
+  }
+  return out;
+}
 function renderBookingStep(){
   const st = AppState.booking;
   const biz = getBusiness(st.bizId);
@@ -903,7 +926,7 @@ function renderBookingStep(){
       <h3 style="margin-bottom:14px;">Select a date</h3>
       <div class="date-grid">
         ${dates.map(d=>{
-          const iso = d.toISOString().slice(0,10);
+          const iso = localISO(d);
           const label = d.toLocaleDateString('en-US',{weekday:'short'});
           const num = d.getDate();
           return `<div class="date-pick ${st.date===iso?'selected':''}" data-date="${iso}"><div>${label}</div><div style="font-weight:700;font-size:15px;">${num}</div></div>`;
@@ -911,12 +934,12 @@ function renderBookingStep(){
       </div>
     `;
   } else if(st.step === 3){
-    const times = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
+    const times = slotsFor(biz, st.date, biz.services.find(s=>s.id===st.serviceId));
     const takenTimes = (biz.busy||[]).filter(b=>b.date===st.date).map(b=>b.time)
       .concat((biz.appointments||[]).filter(a=>a.date===st.date && a.status!=='cancelled').map(a=>a.time));
     body = `
       <h3 style="margin-bottom:14px;">Select a time</h3>
-      <div class="time-grid">
+      ${times.length ? '' : '<p class="text-muted">The business is closed or fully past for this day. Go back and pick another date.</p>'}<div class="time-grid">
         ${times.map(t=>{
           const taken = takenTimes.includes(t);
           return `<div class="time-pick ${st.time===t?'selected':''} ${taken?'taken':''}" data-time="${taken?'':t}">${to12h(t)}</div>`;
@@ -994,7 +1017,7 @@ function bookingCanProceed(){
 function wireBookingStep(biz){
   const st = AppState.booking;
   document.querySelectorAll('.svc-pick').forEach(el=>el.addEventListener('click', ()=>{ st.serviceId = el.getAttribute('data-svc'); renderBookingStep(); }));
-  document.querySelectorAll('.date-pick').forEach(el=>el.addEventListener('click', ()=>{ st.date = el.getAttribute('data-date'); renderBookingStep(); }));
+  document.querySelectorAll('.date-pick').forEach(el=>el.addEventListener('click', ()=>{ st.date = el.getAttribute('data-date'); st.time = null; renderBookingStep(); }));
   document.querySelectorAll('.time-pick:not(.taken)').forEach(el=>el.addEventListener('click', ()=>{ st.time = el.getAttribute('data-time'); renderBookingStep(); }));
 
   const backBtn = document.getElementById('booking-back');
@@ -1280,7 +1303,7 @@ function renderDashboard(section){
   wireDashSectionEvents(section, biz);
 }
 
-document.getElementById('dash-sidebar').querySelector('[data-dash="upgrade"]')?.addEventListener('click', ()=>navigate('dashboard/subscription'));
+document.addEventListener('click', e=>{ const el = e.target.closest('#dash-content [data-dash]'); if(el) navigate('dashboard/'+el.getAttribute('data-dash')); });
 document.querySelector('.sidebar-footer [data-dash="upgrade"]')?.addEventListener('click', ()=>navigate('dashboard/subscription'));
 document.getElementById('dash-logout').addEventListener('click', ()=>{ logoutUser(); navigate('home'); showToast('Logged out'); });
 document.getElementById('dash-hamburger').addEventListener('click', ()=>{
@@ -1316,10 +1339,10 @@ function profileCompleteness(biz){
 }
 
 function renderDashOverview(biz){
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISO();
   const todaysAppts = (biz.appointments||[]).filter(a=>a.date===today && a.status!=='cancelled').sort((a,b)=>a.time<b.time?-1:1);
   const totalBookings = (biz.appointments||[]).length;
-  const thisMonth = new Date().toISOString().slice(0,7);
+  const thisMonth = localISO().slice(0,7);
   const monthBookings = (biz.appointments||[]).filter(a=>a.date.startsWith(thisMonth)).length;
   const revenue = (biz.appointments||[]).filter(a=>a.status==='completed').reduce((s,a)=>s+(a.price||0),0);
   const completion = profileCompleteness(biz);
@@ -1439,7 +1462,7 @@ function renderDashProfile(biz){
     ${checkFeatureAccess('customUrl', biz.plan) ? `
     <div class="panel">
       <div class="panel-head"><h3>Custom business URL</h3></div>
-      <div class="field"><label>Your shareable link</label><input id="edit-biz-url" value="aura.co.ke/${esc(biz.id)}"></div>
+      <p class="text-muted" style="font-size:13.5px;">Custom links are coming soon. Until then, share your page link from the panel above.</p>
     </div>` : `
     <div class="panel">
       <div class="panel-head"><h3>Custom business URL</h3></div>
@@ -1518,6 +1541,15 @@ function resizeImageFile(file, maxDim, quality){
     };
     reader.onerror = ()=> reject(new Error('Could not read that file'));
     reader.readAsDataURL(file);
+  });
+}
+
+const CLOUDINARY = { cloud:'dbk47jrff', preset:'' }; // set preset to an UNSIGNED upload preset to store photos on Cloudinary
+function uploadImage(file, maxDim, quality){
+  return resizeImageFile(file, maxDim, quality).then(dataUrl => {
+    if(!CLOUDINARY.preset) return dataUrl;
+    const fd = new FormData(); fd.append('file', dataUrl); fd.append('upload_preset', CLOUDINARY.preset);
+    return fetch('https://api.cloudinary.com/v1_1/'+CLOUDINARY.cloud+'/image/upload', { method:'POST', body:fd }).then(r => r.json()).then(j => { if(!j.secure_url) throw new Error('Upload failed'); return j.secure_url; });
   });
 }
 
@@ -1635,10 +1667,10 @@ const APPT_TABS = [
 let apptActiveTab = 'upcoming';
 
 function filterAppointments(biz, tab){
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISO();
   const list = biz.appointments || [];
   if(tab === 'today') return list.filter(a=>a.date===today && a.status!=='cancelled');
-  if(tab === 'upcoming') return list.filter(a=> (a.date>today || (a.date===today)) && (a.status==='pending'||a.status==='upcoming'||a.status==='confirmed'));
+  if(tab === 'upcoming') return list.filter(a=> (a.date>=today || a.status==='pending') && (a.status==='pending'||a.status==='upcoming'||a.status==='confirmed'));
   if(tab === 'completed') return list.filter(a=>a.status==='completed');
   if(tab === 'cancelled') return list.filter(a=>a.status==='cancelled');
   return list;
@@ -1840,7 +1872,7 @@ function renderDashAnalytics(biz){
   const weekLabels = [], weekCounts = [];
   for(let i=6;i>=0;i--){
     const d = new Date(); d.setDate(today.getDate()-i);
-    const iso = d.toISOString().slice(0,10);
+    const iso = localISO(d);
     weekLabels.push(d.toLocaleDateString('en-US',{weekday:'short'}));
     weekCounts.push(appts.filter(a=>a.date===iso).length);
   }
@@ -1853,7 +1885,7 @@ function renderDashAnalytics(biz){
 
   const monthRevenue = appts.filter(a=>a.status==='completed').reduce((s,a)=>s+(a.price||0),0);
   const uniqueCustomers = new Set(appts.map(a=>a.customerPhone||a.customerName));
-  const thisMonth = new Date().toISOString().slice(0,7);
+  const thisMonth = localISO().slice(0,7);
   const newThisMonth = new Set(appts.filter(a=>a.date.startsWith(thisMonth)).map(a=>a.customerPhone||a.customerName)).size;
 
   return `
@@ -1932,11 +1964,10 @@ function wireSubscriptionSection(biz){
     btn.addEventListener('click', ()=>{
       const targetPlan = btn.getAttribute('data-choose-plan');
       if(targetPlan === 'free'){
-        openModal(confirmModal('Switch to Free plan?', 'You will lose access to features not included in Free immediately.', ()=>{
-          const fresh = getBusiness(biz.id);
-          fresh.plan = 'free';
-          fresh.subscription = { plan:'free', status:'active', billingCycle:null, startDate:new Date().toISOString().slice(0,10), expiryDate:null, paymentProvider:null, transactionId:null };
-          saveBusiness(fresh); closeModal(); showToast('Switched to Free plan'); renderDashboard('subscription');
+        openModal(confirmModal('Switch to Free plan?', 'You will lose access to features not included in Free. Our team makes the change once you confirm on WhatsApp.', ()=>{
+          const msg = 'Hi, I\'d like to switch ' + biz.name + ' (' + biz.id + ') to the Free plan.';
+          window.open('https://wa.me/254115506649?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+          closeModal(); showToast('Opening WhatsApp...');
         }));
         return;
       }
@@ -2051,7 +2082,7 @@ function wireDashSectionEvents(section, biz){
         const file = e.target.files && e.target.files[0];
         if(!file) return;
         if(!file.type.startsWith('image/')){ showToast('Please choose an image file', 'error'); logoFileInput.value=''; return; }
-        resizeImageFile(file, 500, 0.85).then(dataUrl=>{
+        uploadImage(file, 500, 0.85).then(dataUrl=>{
           const fresh = getBusiness(biz.id);
           fresh.logoImage = dataUrl;
           saveBusiness(fresh);
@@ -2078,7 +2109,7 @@ function wireDashSectionEvents(section, biz){
         const file = e.target.files && e.target.files[0];
         if(!file) return;
         if(!file.type.startsWith('image/')){ showToast('Please choose an image file', 'error'); coverFileInput.value=''; return; }
-        resizeImageFile(file, 1200, 0.8).then(dataUrl=>{
+        uploadImage(file, 1200, 0.8).then(dataUrl=>{
           const fresh = getBusiness(biz.id);
           fresh.coverImage = dataUrl;
           saveBusiness(fresh);
@@ -2105,7 +2136,7 @@ function wireDashSectionEvents(section, biz){
         const file = e.target.files && e.target.files[0];
         if(!file) return;
         if(!file.type.startsWith('image/')){ showToast('Please choose an image file', 'error'); photoFileInput.value=''; return; }
-        resizeImageFile(file, 900, 0.75).then(dataUrl=>{
+        uploadImage(file, 900, 0.75).then(dataUrl=>{
           const fresh = getBusiness(biz.id);
           fresh.gallery = fresh.gallery || [];
           fresh.gallery.push(dataUrl);
@@ -2152,9 +2183,10 @@ function wireDashSectionEvents(section, biz){
    --------------------------------------------------------------------- */
 const ADMIN_NAV = [
   {key:'overview', label:'Platform overview', icon:ICON.home},
+  {key:'applications', label:'Applications', icon:ICON.users},
   {key:'businesses', label:'Businesses', icon:ICON.store}
 ];
-const ADMIN_TITLES = { overview:'Platform overview', businesses:'Businesses' };
+const ADMIN_TITLES = { overview:'Platform overview', applications:'Applications', businesses:'Businesses' };
 let adminSearch = '', adminPlanFilter = 'All', adminStatusFilter = 'All';
 
 /* Owner emails live in businesses/{id}/private/owner (admin-only). Older businesses still have the
@@ -2178,7 +2210,7 @@ function adminLoadOwnerEmails(){
         return batch.commit();
       }
     }).catch(err => console.error('Owner email lookup failed', err));
-  })).then(() => renderRoute());
+  })).then(() => refreshRoute());
 }
 
 function renderAdmin(section){
@@ -2187,12 +2219,13 @@ function renderAdmin(section){
   document.getElementById('admin-title').textContent = ADMIN_TITLES[section];
 
   const nav = document.getElementById('admin-sidenav');
-  nav.innerHTML = ADMIN_NAV.map(item=>`<div class="side-link ${section===item.key?'active':''}" data-admin-nav="${item.key}"><span class="ic">${item.icon}</span>${item.label}</div>`).join('');
+  nav.innerHTML = ADMIN_NAV.map(item=>`<div class="side-link ${section===item.key?'active':''}" data-admin-nav="${item.key}"><span class="ic">${item.icon}</span>${item.label}${item.key==='applications' && pendingApps() ? `<span class="nav-badge">${pendingApps()}</span>` : ''}</div>`).join('');
   nav.querySelectorAll('[data-admin-nav]').forEach(el=> el.addEventListener('click', ()=> navigate('admin/'+el.getAttribute('data-admin-nav'))));
 
   const content = document.getElementById('admin-content');
-  content.innerHTML = section === 'overview' ? renderAdminOverview() : renderAdminBusinesses();
+  content.innerHTML = section === 'overview' ? renderAdminOverview() : section === 'applications' ? renderAdminApplications() : renderAdminBusinesses();
   if(section === 'businesses') adminLoadOwnerEmails();
+  if(section === 'overview') getBusinesses().forEach(b => ensureAppointmentsListener(b.id));
   wireAdminSectionEvents(section);
 }
 
@@ -2211,7 +2244,7 @@ function renderAdminOverview(){
   businesses.forEach(b=> byPlan[b.plan] = (byPlan[b.plan]||0)+1 );
   const activeSubs = businesses.filter(b=>b.plan!=='free').length;
   const totalBookings = businesses.reduce((s,b)=>s+((b.appointments||[]).length),0);
-  const thisMonth = new Date().toISOString().slice(0,7);
+  const thisMonth = localISO().slice(0,7);
   const newRegistrations = businesses.filter(b=>b.joined && b.joined.startsWith(thisMonth)).length;
 
   return `
@@ -2275,6 +2308,7 @@ function renderAdminBusinesses(){
 }
 
 function wireAdminSectionEvents(section){
+  if(section === 'applications'){ wireAdminApplications(); return; }
   if(section !== 'businesses') return;
   const searchInput = document.getElementById('admin-search-input');
   if(searchInput) searchInput.addEventListener('input', ()=>{ adminSearch = searchInput.value; renderAdmin('businesses'); searchInput.focus(); searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length); });
@@ -2298,7 +2332,7 @@ function wireAdminSectionEvents(section){
       const start = new Date(); const expiry = new Date(start);
       if(plan !== 'free') expiry.setMonth(expiry.getMonth() + (cycle === 'yearly' ? 12 : 1));
       fresh.plan = plan;
-      fresh.subscription = { plan, status: prev.status || 'active', billingCycle: cycle, startDate: start.toISOString().slice(0,10), expiryDate: plan === 'free' ? null : expiry.toISOString().slice(0,10), paymentProvider: prev.paymentProvider || null, transactionId: prev.transactionId || null };
+      fresh.subscription = { plan, status: prev.status || 'active', billingCycle: cycle, startDate: localISO(start), expiryDate: plan === 'free' ? null : localISO(expiry), paymentProvider: prev.paymentProvider || null, transactionId: prev.transactionId || null };
       saveBusiness(fresh);
       showToast(fresh.name + ' is now on the ' + PLANS[plan].label + ' plan');
       renderAdmin('businesses');
@@ -2394,13 +2428,13 @@ function wireAdminAddBusinessModal(){
         plan: plan,
         subscription: {
           plan: plan, status:'active', billingCycle: plan==='free' ? null : 'monthly',
-          startDate: start.toISOString().slice(0,10),
-          expiryDate: plan==='free' ? null : new Date(start.getFullYear(), start.getMonth()+1, start.getDate()).toISOString().slice(0,10),
+          startDate: localISO(start),
+          expiryDate: plan==='free' ? null : localISO(new Date(start.getFullYear(), start.getMonth()+1, start.getDate())),
           paymentProvider: null, transactionId: null
         },
         hours:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=>({day:d, open:'09:00', close:'18:00'})),
         gallery:[], services:[], reviews:[], staff:[],
-        joined: start.toISOString().slice(0,10)
+        joined: localISO(start)
       };
       const bizRef = db.collection('businesses').doc(bizId);
       const createBatch = db.batch();
@@ -2431,6 +2465,96 @@ function wireAdminAddBusinessModal(){
 /* ---------------------------------------------------------------------
    20. MOBILE NAV + MISC GLOBAL WIRING
    --------------------------------------------------------------------- */
+/* SELF-REGISTRATION: owners apply, the admin approves.
+   applications/{id}: public create, admin-only read/update/delete (see firestore.rules). */
+let applications = [], applicationsUnsub = null;
+function pendingApps(){ return applications.filter(a => a.status === 'pending').length; }
+function startApplicationsListener(){
+  if(applicationsUnsub) return;
+  applicationsUnsub = db.collection('applications').onSnapshot(snap => {
+    applications = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    refreshRoute();
+  }, err => console.error('Applications listener error', err));
+}
+function stopApplicationsListener(){ if(applicationsUnsub){ applicationsUnsub(); applicationsUnsub = null; } applications = []; }
+
+function renderRegister(params){
+  const sel = document.getElementById('reg-plan');
+  if(!sel.options.length) sel.innerHTML = PLAN_ORDER.map(p => `<option value="${p}">${esc(PLANS[p].label)}${p==='free' ? '' : ' — '+fmtKsh(PLANS[p].price.monthly)+'/mo'}</option>`).join('');
+  const p = params.get('plan') || '';
+  if(sel.dataset.p !== p){ sel.dataset.p = p; if(PLANS[p]) sel.value = p; }
+}
+document.getElementById('register-form').addEventListener('submit', function(e){
+  e.preventDefault();
+  const v = id => document.getElementById(id).value.trim();
+  const d = { businessName:v('reg-name'), category:v('reg-category'), location:v('reg-location'), ownerName:v('reg-owner'), whatsapp:v('reg-phone'), ownerEmail:v('reg-email').toLowerCase(), description:v('reg-desc'), plan:v('reg-plan') };
+  const checks = { 'f-reg-name': d.businessName.length > 1, 'f-reg-location': d.location.length > 1, 'f-reg-owner': d.ownerName.length > 1, 'f-reg-phone': validPhone(d.whatsapp), 'f-reg-email': validEmail(d.ownerEmail) };
+  let ok = true; Object.keys(checks).forEach(k => { setFieldError(k, !checks[k]); if(!checks[k]) ok = false; });
+  if(!ok) return;
+  const done = () => { this.style.display = 'none'; document.getElementById('register-done').style.display = 'block'; window.scrollTo({top:0, behavior:'instant'}); };
+  if(document.getElementById('reg-website').value){ done(); return; }
+  try {
+    const now = Date.now(), recent = JSON.parse(localStorage.getItem('aura_apps') || '[]').filter(t => now - t < 86400000);
+    if(recent.length >= 3){ showToast('You have already sent several applications today. We will be in touch.', 'error'); return; }
+    recent.push(now); localStorage.setItem('aura_apps', JSON.stringify(recent));
+  } catch(err) {}
+  const btn = this.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
+  db.collection('applications').add({ ...d, whatsapp: waNumber(d.whatsapp) || d.whatsapp, status:'pending', createdAt:new Date().toISOString() })
+    .then(done)
+    .catch(err => { console.error('Application failed', err); showToast('Could not send your application. Check your connection and try again.', 'error'); })
+    .finally(() => { btn.disabled = false; btn.textContent = 'Submit application'; });
+});
+
+function renderAdminApplications(){
+  const list = applications.slice().sort((a,b) => (b.createdAt||'') < (a.createdAt||'') ? -1 : 1);
+  const card = a => `<div class="service-row"><div class="sinfo"><h4>${esc(a.businessName)} <span class="price-tag">${esc(a.category)}</span></h4><p>${esc(a.location)} · ${esc(a.ownerName)} · ${esc(a.whatsapp)} · ${esc(a.ownerEmail)}</p><p>${esc(a.description || 'No description given')}</p><div class="dur">Asked for ${esc((PLANS[a.plan] || PLANS.free).label)} · ${esc((a.createdAt||'').slice(0,10))}</div></div><div class="row-actions">${a.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-app-approve="${esc(a.id)}">Approve</button><button class="btn btn-danger btn-sm" data-app-reject="${esc(a.id)}">Reject</button>` : `<span class="badge badge-${a.status==='approved' ? 'confirmed' : 'cancelled'}">${esc(a.status)}</span><button class="btn btn-ghost btn-sm" data-app-delete="${esc(a.id)}">Remove</button>`}</div></div>`;
+  return `<div class="panel"><div class="panel-head"><h3>Applications <span class="text-muted" style="font-weight:400;font-size:13px;">(${pendingApps()} waiting)</span></h3></div>${list.length ? list.map(card).join('') : `<div class="empty-state"><div class="ico">${ICON.users}</div><h4>No applications yet</h4><p>When someone applies from the List Your Business page, it shows up here.</p></div>`}</div>`;
+}
+function wireAdminApplications(){
+  const find = id => applications.find(a => a.id === id);
+  document.querySelectorAll('[data-app-approve]').forEach(b => b.addEventListener('click', () => {
+    const a = find(b.getAttribute('data-app-approve')); if(!a) return;
+    openModal(`<div class="modal-head"><h3>Approve ${esc(a.businessName)}</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><p class="text-muted" style="font-size:13.5px;margin-bottom:14px;">This creates the owner's login (${esc(a.ownerEmail)}) and publishes the page. They get an email to set their own password. Only start someone on a paid plan after payment is confirmed.</p><div class="field"><label>Start on plan</label><select id="approve-plan">${PLAN_ORDER.map(p => `<option value="${p}">${esc(PLANS[p].label)}</option>`).join('')}</select></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="approve-confirm-btn">Approve and create account</button></div>`);
+    document.getElementById('approve-confirm-btn').addEventListener('click', () => approveApplication(a, document.getElementById('approve-plan').value));
+  }));
+  document.querySelectorAll('[data-app-reject]').forEach(b => b.addEventListener('click', () => {
+    db.collection('applications').doc(b.getAttribute('data-app-reject')).update({ status:'rejected', reviewedAt:localISO() }).then(() => showToast('Application rejected')).catch(() => showToast('Could not update the application', 'error'));
+  }));
+  document.querySelectorAll('[data-app-delete]').forEach(b => b.addEventListener('click', () => {
+    db.collection('applications').doc(b.getAttribute('data-app-delete')).delete().catch(() => showToast('Could not remove the application', 'error'));
+  }));
+}
+function approveApplication(app, plan){
+  const btn = document.getElementById('approve-confirm-btn'); btn.disabled = true; btn.textContent = 'Creating account…';
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const tempPw = Array.from(crypto.getRandomValues(new Uint8Array(12))).map(x => chars[x % chars.length]).join('');
+  createOwnerAccount(app.ownerEmail, tempPw).then(ownerUid => {
+    const id = slugify(app.businessName) + '-' + Math.floor(Math.random()*900+100), start = new Date();
+    const biz = { id, name:app.businessName, category:app.category, emoji:'', ownerUid, location:app.location,
+      description: app.description || 'Tell customers about this business — edit it from the business dashboard.',
+      rating:0, reviewCount:0, priceFrom:0, coverColor:'linear-gradient(135deg,#1B3550,#0D1B2A)', logoColor:'#FF9F1C',
+      whatsapp: app.whatsapp || '', socialLinks:{}, plan,
+      subscription: { plan, status:'active', billingCycle: plan==='free' ? null : 'monthly', startDate:localISO(start), expiryDate: plan==='free' ? null : localISO(new Date(start.getFullYear(), start.getMonth()+1, start.getDate())), paymentProvider:null, transactionId:null },
+      hours:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => ({day:d, open:'09:00', close:'18:00'})),
+      gallery:[], services:[], reviews:[], staff:[], joined:localISO(start) };
+    const ref = db.collection('businesses').doc(id), batch = db.batch();
+    batch.set(ref, biz);
+    batch.set(ref.collection('private').doc('owner'), { ownerEmail:app.ownerEmail });
+    batch.update(db.collection('applications').doc(app.id), { status:'approved', businessId:id, reviewedAt:localISO() });
+    adminOwnerEmails[id] = app.ownerEmail;
+    return batch.commit().then(() => {
+      auth.sendPasswordResetEmail(app.ownerEmail).catch(() => {});
+      const num = waNumber(app.whatsapp), first = String(app.ownerName).split(/\s+/)[0];
+      const msg = 'Hi ' + first + ', ' + app.businessName + ' is now live on Aura! Log in at ' + window.location.origin + window.location.pathname + '#login with ' + app.ownerEmail + ' and the temporary password ' + tempPw + '. We also emailed you a link to set your own password.';
+      openModal(`<div class="modal-head"><h3>Approved</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><p>${esc(app.businessName)} is live. A password-reset email is on its way to ${esc(app.ownerEmail)}.</p><div class="summary-row"><span>Temporary password</span><b>${esc(tempPw)}</b></div>${num ? `<a class="btn btn-accent btn-block mt16" target="_blank" rel="noopener" href="https://wa.me/${num}?text=${encodeURIComponent(msg)}">${ICON.chat} Tell ${esc(first)} on WhatsApp</a>` : ''}</div>`);
+    });
+  }).catch(err => {
+    console.error('Approval failed', err);
+    showToast(err.code === 'auth/email-already-in-use' ? 'That email already has a login. Ask the applicant for a different one.' : 'Could not approve. Check your connection and try again.', 'error');
+    btn.disabled = false; btn.textContent = 'Approve and create account';
+  });
+}
+
 document.getElementById('mobile-menu-btn').addEventListener('click', ()=>{
   document.getElementById('mobile-nav').classList.toggle('open');
 });
