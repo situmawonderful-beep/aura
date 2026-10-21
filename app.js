@@ -143,6 +143,25 @@ function addAppointment(bizId, appt){
   batch.set(slotRef, { date: appt.date, time: appt.time, apptId: apptRef.id });
   return batch.commit(); // fails as a whole if somebody already took this slot
 }
+/* Automatic emails via EmailJS (free: 200/month, no server). Leave publicKey empty to switch emails off.
+   One generic template is used for every email: {{subject}}, {{message}}, {{to_name}} and "To email" = {{to_email}}. */
+const EMAILJS = { publicKey:'j5sZoepLpCmnBv3n8', serviceId:'service_zuzxas7', templateId:'template_qio4h39' };
+function sendEmail(toEmail, toName, subject, message){
+  if(!EMAILJS.publicKey || !EMAILJS.serviceId || !EMAILJS.templateId || !toEmail) return Promise.resolve(false);
+  return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ service_id:EMAILJS.serviceId, template_id:EMAILJS.templateId, user_id:EMAILJS.publicKey,
+      template_params:{ to_email:toEmail, to_name:toName || 'there', subject, message } })
+  }).then(r => r.ok).catch(() => false);
+}
+function prettyWhen(date, time){ return new Date(date+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', day:'numeric', month:'long'}) + ' at ' + to12h(time); }
+function notifyCustomerStatus(bizId, apptId, status){
+  const biz = getBusiness(bizId), a = biz && (biz.appointments || []).find(x => x.id === apptId);
+  if(!a || !a.customerEmail) return;
+  const when = prettyWhen(a.date, a.time);
+  if(status === 'upcoming' || status === 'confirmed') sendEmail(a.customerEmail, a.customerName, 'Your appointment is confirmed', biz.name+' has confirmed your '+a.serviceName+' on '+when+'. See you then!');
+  else if(status === 'cancelled') sendEmail(a.customerEmail, a.customerName, 'Your appointment was cancelled', biz.name+' could not keep your '+a.serviceName+' booking on '+when+'. Please contact them to pick another time.');
+}
 function updateAppointmentStatus(bizId, apptId, status){
   const bizRef = db.collection('businesses').doc(bizId);
   const batch = db.batch();
@@ -154,6 +173,7 @@ function updateAppointmentStatus(bizId, apptId, status){
     if(slot && slot.apptId === apptId) batch.delete(bizRef.collection('busy').doc(slot.id));
   }
   return batch.commit()
+    .then(() => notifyCustomerStatus(bizId, apptId, status))
     .catch(err => { console.error('Failed to update appointment', err); showToast('Could not update — check your connection', 'error'); });
 }
 
@@ -1067,6 +1087,7 @@ function confirmBooking(biz){
     serviceId: svc.id, serviceName: svc.name, price: svc.price,
     date: st.date, time: st.time, status: 'pending'
   }).then(()=>{
+    if(st.email) sendEmail(st.email, st.name, 'Booking request sent to '+biz.name, 'Hi '+st.name+', your request for '+svc.name+' at '+biz.name+' on '+prettyWhen(st.date, st.time)+' has been sent. '+biz.name+' will confirm it shortly and you will get another email when they do.');
     st.step = 'success';
     renderBookingStep();
   }).catch(err=>{
@@ -1427,6 +1448,10 @@ function renderDashProfile(biz){
         <button class="btn btn-outline btn-sm" id="copy-share-link-btn">${ICON.copy} Copy link</button>
         <a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Check out '+biz.name+' on Aura: '+getShareLink(biz.id))}">${ICON.chat} Share on WhatsApp</a>
       </div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:18px;">
+        <div id="share-qr" style="background:#fff;padding:10px;border-radius:12px;line-height:0;min-width:200px;min-height:200px;"></div>
+        <div style="flex:1;min-width:200px;"><b>Your QR code</b><p class="text-muted" style="font-size:13px;margin:6px 0 12px;">Print it and put it on your counter, mirror or door. Customers scan it to open your page and book.</p><button class="btn btn-outline btn-sm" id="download-qr-btn">Download QR poster</button></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -1473,6 +1498,21 @@ function renderDashProfile(biz){
 function escapeAttr(s){ return esc(s); }
 
 /* ---- Share link (works for every plan — the auto-generated page link) ---- */
+function renderShareQr(biz){
+  const box = document.getElementById('share-qr'); if(!box) return;
+  if(!window.QRCode){ box.style.lineHeight = '1.4'; box.textContent = 'QR code could not load. Check your internet connection.'; return; }
+  const link = getShareLink(biz.id);
+  box.innerHTML = ''; new QRCode(box, { text:link, width:180, height:180, correctLevel:QRCode.CorrectLevel.M });
+  document.getElementById('download-qr-btn').onclick = () => {
+    const big = document.createElement('div'); new QRCode(big, { text:link, width:800, height:800, correctLevel:QRCode.CorrectLevel.M });
+    const src = big.querySelector('canvas'); if(!src) return;
+    const c = document.createElement('canvas'); c.width = 960; c.height = 1080; const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0,0,960,1080); x.drawImage(src, 80, 80, 800, 800);
+    x.textAlign = 'center'; x.fillStyle = '#0D1B2A'; x.font = 'bold 44px sans-serif'; x.fillText(biz.name, 480, 950, 860);
+    x.fillStyle = '#555'; x.font = '30px sans-serif'; x.fillText('Scan to view services and book', 480, 1010);
+    const a = document.createElement('a'); a.download = slugify(biz.name) + '-qr.png'; a.href = c.toDataURL('image/png'); a.click();
+  };
+}
 function getShareLink(bizId){
   return window.location.origin + window.location.pathname + '#business?id=' + bizId;
 }
@@ -2069,6 +2109,7 @@ function wireDashSectionEvents(section, biz){
       { const rawWa = document.getElementById('edit-biz-whatsapp').value.trim(); fresh.whatsapp = waNumber(rawWa) || rawWa.replace(/^\+/,''); }
       saveBusiness(fresh); showToast('Business profile saved'); renderDashboard('profile');
     });
+    { const qb = currentBiz(); if(qb) renderShareQr(qb); }
     const copyLinkBtn = document.getElementById('copy-share-link-btn');
     if(copyLinkBtn) copyLinkBtn.addEventListener('click', ()=>{
       copyToClipboard(document.getElementById('share-link-input').value);
@@ -2545,6 +2586,7 @@ function approveApplication(app, plan){
     return batch.commit().then(() => {
       auth.sendPasswordResetEmail(app.ownerEmail).catch(() => {});
       const num = waNumber(app.whatsapp), first = String(app.ownerName).split(/\s+/)[0];
+      sendEmail(app.ownerEmail, first, app.businessName+' is now live on Aura', 'Good news, '+app.businessName+' has been approved and your page is live: '+getShareLink(id)+'  We sent you a separate email to set your password. After that, log in at '+window.location.origin+window.location.pathname+'#login with '+app.ownerEmail+'.');
       const msg = 'Hi ' + first + ', ' + app.businessName + ' is now live on Aura! Log in at ' + window.location.origin + window.location.pathname + '#login with ' + app.ownerEmail + ' and the temporary password ' + tempPw + '. We also emailed you a link to set your own password.';
       openModal(`<div class="modal-head"><h3>Approved</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><p>${esc(app.businessName)} is live. A password-reset email is on its way to ${esc(app.ownerEmail)}.</p><div class="summary-row"><span>Temporary password</span><b>${esc(tempPw)}</b></div>${num ? `<a class="btn btn-accent btn-block mt16" target="_blank" rel="noopener" href="https://wa.me/${num}?text=${encodeURIComponent(msg)}">${ICON.chat} Tell ${esc(first)} on WhatsApp</a>` : ''}</div>`);
     });
