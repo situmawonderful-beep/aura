@@ -456,7 +456,7 @@ function refreshRoute(){
 }
 function renderRoute(){
   const route = getRoute();
-  const publicViews = ['home','pricing','discover','business','login'];
+  const publicViews = ['home','pricing','discover','business','login','register','privacy','terms'];
   const isAppView = route.view === 'dashboard' || route.view === 'admin';
 
   // Guard: dashboard/admin require a logged in user. We wait for authReady
@@ -1498,16 +1498,24 @@ function renderDashProfile(biz){
 function escapeAttr(s){ return esc(s); }
 
 /* ---- Share link (works for every plan — the auto-generated page link) ---- */
+function drawQr(canvas, text, size){
+  const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), margin = 4, cell = Math.max(1, Math.floor(size / (n + margin*2))), px = cell * (n + margin*2);
+  canvas.width = canvas.height = px;
+  const x = canvas.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, px, px); x.fillStyle = '#000';
+  for(let r = 0; r < n; r++) for(let c = 0; c < n; c++) if(qr.isDark(r, c)) x.fillRect((c+margin)*cell, (r+margin)*cell, cell, cell);
+  return px;
+}
 function renderShareQr(biz){
   const box = document.getElementById('share-qr'); if(!box) return;
-  if(!window.QRCode){ box.style.lineHeight = '1.4'; box.textContent = 'QR code could not load. Check your internet connection.'; return; }
-  const link = getShareLink(biz.id);
-  box.innerHTML = ''; new QRCode(box, { text:link, width:180, height:180, correctLevel:QRCode.CorrectLevel.M });
+  if(typeof qrcode !== 'function'){ box.style.lineHeight = '1.4'; box.textContent = 'QR code could not load. Make sure qrcode.js is uploaded next to index.html.'; return; }
+  const link = getShareLink(biz.id), cv = document.createElement('canvas');
+  drawQr(cv, link, 180); cv.style.display = 'block'; cv.style.width = '180px'; cv.style.height = '180px';
+  box.innerHTML = ''; box.appendChild(cv);
   document.getElementById('download-qr-btn').onclick = () => {
-    const big = document.createElement('div'); new QRCode(big, { text:link, width:800, height:800, correctLevel:QRCode.CorrectLevel.M });
-    const src = big.querySelector('canvas'); if(!src) return;
+    const big = document.createElement('canvas'); drawQr(big, link, 800);
     const c = document.createElement('canvas'); c.width = 960; c.height = 1080; const x = c.getContext('2d');
-    x.fillStyle = '#fff'; x.fillRect(0,0,960,1080); x.drawImage(src, 80, 80, 800, 800);
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 960, 1080); x.imageSmoothingEnabled = false; x.drawImage(big, 80, 80, 800, 800);
     x.textAlign = 'center'; x.fillStyle = '#0D1B2A'; x.font = 'bold 44px sans-serif'; x.fillText(biz.name, 480, 950, 860);
     x.fillStyle = '#555'; x.font = '30px sans-serif'; x.fillText('Scan to view services and book', 480, 1010);
     const a = document.createElement('a'); a.download = slugify(biz.name) + '-qr.png'; a.href = c.toDataURL('image/png'); a.click();
@@ -1722,6 +1730,8 @@ function renderDashAppointments(biz){
   }
   const list = filterAppointments(biz, apptActiveTab).sort((a,b)=> (a.date+a.time) < (b.date+b.time) ? -1:1);
   return `
+    ${remindersPanel(biz)}
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:12px;"><button class="btn btn-outline btn-sm" id="export-appts-btn">Export CSV</button><button class="btn btn-primary btn-sm" id="add-walkin-btn">+ Add booking</button></div>
     <div class="tab-bar">
       ${APPT_TABS.map(t=>`<button class="tab-btn ${apptActiveTab===t.key?'active':''}" data-appt-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
@@ -1798,7 +1808,60 @@ function apptActionButtons(a, biz){
   return `<span class="text-muted" style="font-size:12.5px;">—</span>`;
 }
 
+function downloadFile(name, text, type){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+function toCsv(rows){ return '\ufeff' + rows.map(row => row.map(v => { let t = String(v == null ? '' : v); if(/^[=@\t\r]|^[+\-](?![\d\s()-]+$)/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; }).join(',')).join('\r\n'); }
+function customerRows(biz){
+  const map = {};
+  (biz.appointments || []).forEach(a => { const k = a.customerPhone || a.customerName; const c = map[k] || (map[k] = { name:a.customerName, phone:a.customerPhone || '', email:a.customerEmail || '', visits:0, last:a.date, spent:0 }); c.visits++; if(a.date > c.last) c.last = a.date; if(a.status === 'completed') c.spent += (a.price || 0); });
+  return Object.values(map).sort((a,b) => b.visits - a.visits).map(c => [c.name, c.phone, c.email, c.visits, c.last, c.spent]);
+}
+function adminBackup(){
+  showToast('Preparing backup…');
+  Promise.all(getBusinesses().map(b => db.collection('businesses').doc(b.id).collection('appointments').get().then(sn => ({ ...b, appointments: sn.docs.map(d => ({ id:d.id, ...d.data() })) }))))
+    .then(list => { downloadFile('aura-backup-' + localISO() + '.json', JSON.stringify({ exportedAt:new Date().toISOString(), businesses:list, applications, ownerEmails:adminOwnerEmails }, null, 1), 'application/json'); showToast('Backup downloaded'); })
+    .catch(err => { console.error(err); showToast('Backup failed. Check your connection.', 'error'); });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('#export-appts-btn,#export-customers-btn,#admin-backup-btn'); if(!b) return;
+  if(b.id === 'admin-backup-btn'){ adminBackup(); return; }
+  const biz = currentBiz(); if(!biz) return;
+  if(b.id === 'export-appts-btn') downloadFile(slugify(biz.name) + '-bookings-' + localISO() + '.csv', toCsv([['Date','Time','Customer','Phone','Email','Service','Price (KSh)','Status']].concat((biz.appointments || []).slice().sort((x,y) => (x.date+x.time) < (y.date+y.time) ? -1 : 1).map(a => [a.date, a.time, a.customerName, a.customerPhone || '', a.customerEmail || '', a.serviceName, a.price || 0, a.status]))), 'text/csv');
+  else downloadFile(slugify(biz.name) + '-customers-' + localISO() + '.csv', toCsv([['Name','Phone','Email','Visits','Last visit','Spent (KSh)']].concat(customerRows(biz))), 'text/csv');
+});
+function remindersPanel(biz){
+  const today = localISO(), tm = new Date(); tm.setDate(tm.getDate() + 1); const tomorrow = localISO(tm);
+  const list = (biz.appointments || []).filter(a => (a.date === today || a.date === tomorrow) && (a.status === 'upcoming' || a.status === 'pending') && waNumber(a.customerPhone)).sort((a,b) => (a.date+a.time) < (b.date+b.time) ? -1 : 1);
+  if(!list.length) return '';
+  return `<div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h3>Reminders <span class="text-muted" style="font-weight:400;font-size:13px;">today and tomorrow</span></h3></div>${list.map(a => {
+    const first = String(a.customerName).split(/\s+/)[0], day = a.date === today ? 'today' : 'tomorrow';
+    const msg = 'Hi ' + first + ', a reminder of your ' + a.serviceName + ' at ' + biz.name + ' ' + day + ' at ' + to12h(a.time) + '. Reply here if you need to change it. See you soon!';
+    return `<div class="service-row"><div class="sinfo"><h4>${esc(a.customerName)}</h4><p>${esc(a.serviceName)} · ${day} ${to12h(a.time)}</p></div><div class="row-actions"><a class="btn btn-accent btn-sm" target="_blank" rel="noopener" href="https://wa.me/${waNumber(a.customerPhone)}?text=${encodeURIComponent(msg)}">Remind on WhatsApp</a></div></div>`;
+  }).join('')}</div>`;
+}
+function openWalkinModal(biz){
+  const b = getBusiness(biz.id) || biz;
+  if(!b.services.length){ showToast('Add a service first, then you can add bookings.', 'error'); return; }
+  const now = new Date(); now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
+  const hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  openModal(`<div class="modal-head"><h3>Add a booking</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">
+    <div class="field"><label for="wk-name">Customer name</label><input id="wk-name" maxlength="80"></div>
+    <div class="field"><label for="wk-phone">Phone (optional)</label><input id="wk-phone" maxlength="20" inputmode="tel" placeholder="07XX XXX XXX"></div>
+    <div class="field"><label for="wk-service">Service</label><select id="wk-service">${b.services.map(x => `<option value="${esc(x.id)}">${esc(x.name)} · ${fmtKsh(x.price)}</option>`).join('')}</select></div>
+    <div class="form-row-2"><div class="field"><label for="wk-date">Date</label><input id="wk-date" type="date" value="${localISO(now)}"></div><div class="field"><label for="wk-time">Time</label><input id="wk-time" type="time" value="${hhmm}"></div></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;"><input type="checkbox" id="wk-done"> Already done (mark completed)</label>
+  </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="wk-save">Save booking</button></div>`);
+  document.getElementById('wk-save').addEventListener('click', () => {
+    const v = id => document.getElementById(id).value.trim(), name = v('wk-name'), phone = v('wk-phone'), date = v('wk-date'), time = v('wk-time');
+    if(name.length < 2 || !date || !time){ showToast('Enter the name, date and time.', 'error'); return; }
+    if(phone && !validPhone(phone)){ showToast('That phone number does not look right.', 'error'); return; }
+    const svc = b.services.find(x => x.id === v('wk-service')), btn = document.getElementById('wk-save'); btn.disabled = true;
+    addAppointment(b.id, { customerName:name, customerPhone:phone, customerEmail:'', serviceId:svc.id, serviceName:svc.name, price:svc.price, date, time, status: document.getElementById('wk-done').checked ? 'completed' : 'upcoming', source:'walk-in' })
+      .then(() => { closeModal(); showToast('Booking added'); })
+      .catch(err => { btn.disabled = false; showToast(err && err.code === 'permission-denied' ? 'That exact time is already booked. Pick a different time.' : 'Could not save. Check your connection.', 'error'); });
+  });
+}
 function wireAppointmentsSection(biz){
+  const addBtn = document.getElementById('add-walkin-btn'); if(addBtn) addBtn.addEventListener('click', () => openWalkinModal(biz));
   document.querySelectorAll('[data-appt-tab]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ apptActiveTab = btn.getAttribute('data-appt-tab'); renderDashboard('appointments'); });
   });
@@ -1827,7 +1890,7 @@ function renderDashCustomers(biz){
   if(!checkFeatureAccess('booking', biz.plan)) return renderLockedFeature('Customer management', 'business');
   return `
     <div class="panel">
-      <div class="panel-head"><h3>Customers <span class="text-muted" style="font-weight:400;font-size:13px;">(${esc(customers.length)})</span></h3></div>
+      <div class="panel-head"><h3>Customers <span class="text-muted" style="font-weight:400;font-size:13px;">(${esc(customers.length)})</span></h3><button class="btn btn-outline btn-sm" id="export-customers-btn">Export CSV</button></div>
       ${customers.length ? `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>Name</th><th>Phone</th><th>Visits</th><th>Last visit</th><th>Total spent</th></tr></thead>
         <tbody>${customers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.phone||'—')}</td><td>${esc(c.visits)}</td><td>${new Date(c.lastDate+'T00:00:00').toLocaleDateString('en-US',{day:'numeric',month:'short'})}</td><td>${fmtKsh(c.spent)}</td></tr>`).join('')}</tbody>
@@ -2320,7 +2383,7 @@ function renderAdminBusinesses(){
           <select id="admin-plan-filter" style="padding:9px 12px;border-radius:8px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);font-size:13.5px;">
             ${['All','Free','Starter','Business','Pro'].map(p=>`<option ${adminPlanFilter===p?'selected':''}>${esc(p)}</option>`).join('')}
           </select>
-          <button class="btn btn-primary btn-sm" id="admin-add-business-btn">+ Add business</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" id="admin-backup-btn">Download backup</button><button class="btn btn-primary btn-sm" id="admin-add-business-btn">+ Add business</button></div>
         </div>
       </div>
       <div class="table-wrap"><table class="data-table">
