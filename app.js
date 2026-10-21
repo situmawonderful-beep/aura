@@ -753,7 +753,7 @@ function renderBusinessProfile(id){
             <h1>${esc(biz.name)}</h1>
             <div class="biz-header-meta">
               <span>${esc(biz.category)}</span><span>·</span>
-              <span class="mockup-stars" style="color:var(--accent)">★★★★★</span><span>${esc(biz.rating||'New')} ${esc(biz.reviewCount?'('+biz.reviewCount+' reviews)':'')}</span>
+              <span class="mockup-stars" style="color:var(--accent)">★★★★</span><span>${esc(biz.rating||'New')} ${esc(biz.reviewCount?'('+biz.reviewCount+' reviews)':'')}</span>
               <span>·</span><span>${ICON.pin} ${esc(biz.location)}</span>
               <span>·</span><span style="color:${open?'var(--teal)':'var(--danger)'};font-weight:600;">${open ? 'Open now' : 'Closed now'}</span>
             </div>
