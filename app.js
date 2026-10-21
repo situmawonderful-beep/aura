@@ -231,7 +231,7 @@ const PLANS = {
   },
   pro: {
     id:'pro', label:'Pro', price:{monthly:899, yearly:8999},
-    desc:'Manage more of your operations.',
+    desc:'Manage yourbusiness more effectively.',
     features:{ booking:true, staff:true, analytics:true, promotions:true, customUrl:true, insights:true, reviews:true, removeBranding:true, moreServices:true, morePhotos:true, socialLinks:true, socialWhatsapp:true, socialTiktok:true, socialInstagram:true, whatsappConfirm:true },
     limits:{ services:999, photos:999 }
   }
@@ -562,7 +562,7 @@ function renderHomeShopsRow(){
    11. PRICING PAGE
    --------------------------------------------------------------------- */
 function renderPricing(){
-  const grid = document.getElementById('pricing-grid');
+  const grid = document.getElementById('pricing-grid');        
   const cycle = AppState.billingCycle;
   grid.innerHTML = PLAN_ORDER.map(pid=>{
     const p = PLANS[pid];
@@ -2537,7 +2537,7 @@ function wireAdminAddBusinessModal(){
           expiryDate: plan==='free' ? null : localISO(new Date(start.getFullYear(), start.getMonth()+1, start.getDate())),
           paymentProvider: null, transactionId: null
         },
-        hours:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=>({day:d, open:'09:00', close:'18:00'})),
+        hours:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=>({day:d, open:'09:00', close:'20:00'})),
         gallery:[], services:[], reviews:[], staff:[],
         joined: localISO(start)
       };
