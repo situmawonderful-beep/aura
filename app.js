@@ -726,6 +726,7 @@ function renderSocialButtons(biz, excludeKeys){
 
 function renderBusinessProfile(id){
   const biz = getBusiness(id) || (id ? null : getPublicBusinesses()[0]);
+  if(!biz && !cacheReady){ document.getElementById('business-content').innerHTML = '<div class="container" style="padding:90px 0;text-align:center;"><p class="text-muted">Loading…</p></div>'; return; }
   if(!biz){ document.getElementById('business-content').innerHTML = '<div class="container" style="padding:80px 0;"><div class="empty-state"><h4>Business not found</h4></div></div>'; return; }
   const viewer = auth.currentUser;
   const privileged = !!viewer && (viewer.uid === ADMIN_UID || viewer.uid === biz.ownerUid);
