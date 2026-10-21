@@ -240,7 +240,7 @@ const PLAN_ORDER = ['free','starter','business','pro'];
 
 /* Default cover photo used across shop cards, headers and the hero mockup
    until a business uploads its own (biz.coverImage). */
-const DEFAULT_COVER_IMAGE = 'https://res.cloudinary.com/dbk47jrff/image/upload/v1790334740/cover_img_fypxph.jpg';
+const DEFAULT_COVER_IMAGE = 'https://res.cloudinary.com/dbk47jrff/image/upload/v1792574184/sky_ag0ygk.jpg';
 function coverStyle(biz){
   const img = safeImgUrl(biz && biz.coverImage, DEFAULT_COVER_IMAGE);
   return `background-image:url('${esc(img)}'); background-size:cover; background-position:center;`;
