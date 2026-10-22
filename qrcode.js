@@ -449,7 +449,7 @@ var qrcode = function() {
         _typeNumber = typeNumber;
       }
 
-      makeImpl(false, getBestMaskPattern() );
+      makeImpl(false, getBestMaskPatterns() );
     };
 
     _this.createTableTag = function(cellSize, margin) {

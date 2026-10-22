@@ -266,18 +266,19 @@ function planRank(planId){ return PLAN_ORDER.indexOf(planId); }
 
 /* Feature catalogue shown on the landing page + comparison table */
 const FEATURE_CATALOGUE = [
-  { key:'profile', label:'Professional business profile', icon:ICON.home, minPlan:'free', desc:'A polished public page for your business.' },
-  { key:'servicesPricing', label:'Services & pricing', icon:ICON.scissors, minPlan:'free', desc:'List your services with clear pricing.' },
-  { key:'gallery', label:'Photo gallery', icon:ICON.image, minPlan:'free', desc:'Show off your work with photos.' },
-  { key:'location', label:'Business location', icon:ICON.pin, minPlan:'free', desc:'Let customers know where to find you.' },
-  { key:'whatsapp', label:'WhatsApp contact', icon:ICON.chat, minPlan:'free', desc:'One-tap contact button for customers.' },
-  { key:'booking', label:'Appointment booking', icon:ICON.calendar, minPlan:'business', desc:'Accept real online bookings.' },
-  { key:'customers', label:'Customer management', icon:ICON.users, minPlan:'business', desc:'Keep track of who books with you.' },
-  { key:'staff', label:'Staff management', icon:ICON.users, minPlan:'pro', desc:'Add staff, schedules and assignments.' },
-  { key:'analytics', label:'Business analytics', icon:ICON.chart, minPlan:'pro', desc:'Understand bookings and revenue.' },
-  { key:'promotions', label:'Promotions', icon:ICON.tag, minPlan:'pro', desc:'Run discounts and offers.' },
-  { key:'customPage', label:'Custom business page', icon:ICON.link, minPlan:'starter', desc:'A memorable, shareable link.' },
-  { key:'mobileFriendly', label:'Mobile-friendly profile', icon:ICON.phone, minPlan:'free', desc:'Looks great on any device.' }
+  { key: 'profile', label:'Prorfessional business profile', icon:ICON.home, minPlan:'free', desc:'A polished public page for your business.'},
+  { key: 'servicesPricing', label:'services & pricing',icon:ICON.scissors, minPlan:'free', desc: 'List your service with clearr pricing.' },
+  { key: 'gallery', label:'Photo gallary', icon:ICON.image, minPlan:'free', desc:'Show off your work  with your great photos.' }, 
+  { key: 'location', label:'Business location', icon:ICON.pin, minPlan:'free', desc:'Let customers know where to find you.' },
+  { key: 'whatsapp', label:'WhatsApp contact', icocn:ICON.chat, minPlan:'free', desc:'One-tap contact button from customers.' },
+  { key: 'booking', label:'Appointmeent booking', icon:ICON.calendar, minPlan:'business', desc:'Accept real online bookings.' },
+  { key: 'customers', label:'Customer management', icon:ICON.user, minPlan:'business', desc:'Keep tracks of who books with you.' },
+  { key: 'staff', label:'Staff management', icon:ICON.users, minPlan:'pro', desc:'Add staff ,  schedules and assignments.' },
+  { key: 'analytics', label:'Business analytics', icon:ICON.chart, minPlan:'pro', desc:'Understand bookings and revenues.' },
+  { key: 'proomotions', label:'promotions', icon:ICON.tag, minPlan:'pro', desc:'Run discounts and offers.'},
+  { key: 'customPage', label:'Custom business page', icon:ICON.link, minPlan:'starter', desc:'A memorable sharable link.' },
+  { key: 'mobileFriendly', label:'Mobile-fiendly profile', icon:ICON.phone, minPlan:'free', desc:'Looks great on any device.'}
+
 ];
 
 const COMPARE_FEATURES = [
@@ -339,7 +340,13 @@ auth.onAuthStateChanged(fbUser => {
 });
 
 function getCurrentUser(){ return currentAuthUser; }
-function logoutUser(){ auth.signOut(); }
+/* Never leave an email or password sitting in the login form after logging in or out (shared devices). */
+function clearLoginForm(){
+  ['login-id','login-pw'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const pw = document.getElementById('login-pw'); if(pw) pw.type = 'password';
+  const t = document.querySelector('[data-target="login-pw"]'); if(t) t.textContent = 'Show';
+}
+function logoutUser(){ auth.signOut(); clearLoginForm(); }
 function isAdminEmail(email){ return (email||'').trim().toLowerCase() === 'admin@aura.co.ke'; }
 
 /* Creates a Firebase Auth account WITHOUT signing the browser into it — used
@@ -1143,6 +1150,7 @@ document.getElementById('login-form').addEventListener('submit', function(e){
         return;
       }
       showToast('Welcome back' + (isAdmin ? '' : ', ' + biz.name) + '!');
+      clearLoginForm();
       navigate(isAdmin ? 'admin' : 'dashboard');
     });
   }).catch(err => {
