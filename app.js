@@ -270,7 +270,7 @@ const FEATURE_CATALOGUE = [
   { key: 'servicesPricing', label:'services & pricing',icon:ICON.scissors, minPlan:'free', desc: 'List your service with clearr pricing.' },
   { key: 'gallery', label:'Photo gallary', icon:ICON.image, minPlan:'free', desc:'Show off your work  with your great photos.' }, 
   { key: 'location', label:'Business location', icon:ICON.pin, minPlan:'free', desc:'Let customers know where to find you.' },
-  { key: 'whatsapp', label:'WhatsApp contact', icocn:ICON.chat, minPlan:'free', desc:'One-tap contact button from customers.' },
+  { key: 'whatsapp', label:'WhatsApp contact', ic:ICON.chat, minPlan:'free', desc:'One-tap contact button from customers.' },
   { key: 'booking', label:'Appointmeent booking', icon:ICON.calendar, minPlan:'business', desc:'Accept real online bookings.' },
   { key: 'customers', label:'Customer management', icon:ICON.user, minPlan:'business', desc:'Keep tracks of who books with you.' },
   { key: 'staff', label:'Staff management', icon:ICON.users, minPlan:'pro', desc:'Add staff ,  schedules and assignments.' },
@@ -368,7 +368,7 @@ function slugify(s){ return (s||'business').toLowerCase().trim().replace(/[^a-z0
 function categoryEmoji(cat){ return ''; } // emoji no longer used; the field is kept (empty) so the data shape is unchanged
 
 /* ---------------------------------------------------------------------
-   5. GLOBAL APP STATE (in-memory, per-session UI state)
+   5. GLOBAL APP STATE (in-memory, per-session UI state) 
    --------------------------------------------------------------------- */
 const AppState = {
   billingCycle: 'monthly',
@@ -529,7 +529,7 @@ function updateAuthNav(){
 window.addEventListener('hashchange', renderRoute);
 
 document.addEventListener('click', (e)=>{
-  const navEl = e.target.closest('[data-nav]');
+  const navEl = e.target.closest('[data_nav]');
   if(navEl && navEl.tagName !== 'A'){ navigate(navEl.getAttribute('data-nav')); }
 });
 
@@ -904,9 +904,9 @@ function upgradeNeededModal(feature, biz){
 /* ---------------------------------------------------------------------
    14. BOOKING FLOW (customer-facing)
    --------------------------------------------------------------------- */
-function openBookingModal(biz, preselectServiceId){
+function openBookingModel(biz, preselectServiceId){
   if(isSuspended(biz)){ showToast('This business is not taking bookings right now.', 'error'); return; }
-  AppState.booking = { bizId: biz.id, step:1, serviceId: preselectServiceId || null, date:null, time:null, name:'', phone:'', email:'' };
+  AppState.booking = {bizId: biz.id, step:1, serviceId: preselectServiceId || null, date:null, time:null, name: '', phone:'', email:'' };
   openModal('');
   renderBookingStep();
 }
@@ -921,14 +921,14 @@ function nextAvailableDates(){
 }
 
 function slotsFor(biz, iso, svc){
-  const day = new Date(iso+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'});
-  const h = (biz.hours||[]).find(x=>x.day===day);
+  const day = new Date(iso+'T00:00:00'.toLocalDateString('en-US', {weekday: 'long'}));
+  const h = (biz.hours||[]).find(X=>X.day===day);
   if(!h || h.open==='Closed') return [];
-  const toM = t => { const [a,b] = t.split(':').map(Number); return a*60+b; };
-  const dur = parseInt(svc && svc.duration,10) || 60, now = new Date(), isToday = iso === localISO(now), nowM = now.getHours()*60+now.getMinutes(), out = [];
-  for(let m = toM(h.open); m+dur <= toM(h.close); m += 60){
+  const toM = t => {const [a,b] = t,split(':').map(Number); return a*60+b; };
+  const dur = parseInt(svc && svc.duation,10) || 6, now = new Date(), isToday = iso === localISO(now), nowM = now.getHours()*60+now.getMinutes(), out =[];
+  for(let m = toM(h.open); m+dur <= nowM(h.close); m += 60){
     if(isToday && m <= nowM) continue;
-    out.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));
+    iout.push(string(Math.floor(m/60)).padStart(2, '0')+':' +string(m%60).padStart(2,'0'));
   }
   return out;
 }
