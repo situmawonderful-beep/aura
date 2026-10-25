@@ -706,3 +706,23 @@ input[type=time]{ min-width:0; }
   .biz-header-cover{ height:180px; }
   .biz-header-logo{ width:76px; height:76px; margin-top:-38px; font-size:30px; }
 }
+/* ================= HERO: single column, ready for a background image ================= */
+.hero-grid{ grid-template-columns: 1fr; }
+.hero-grid > div{ max-width: 680px; }
+.hero{ padding: 120px 0 110px; }
+@media (max-width:900px){ .hero{ padding: 80px 0 80px; } }
+
+/* WHEN YOU HAVE YOUR HERO IMAGE:
+   1. Save it in an "images" folder next to index.html as hero.webp (or hero.jpg and change the name below).
+   2. Delete the "slash-star" and "star-slash" comment marks around the rule below.
+   The dark gradient on top keeps the white text readable.
+
+.hero{
+  background-image:
+    linear-gradient(90deg, rgba(13,27,42,.94) 0%, rgba(13,27,42,.78) 45%, rgba(13,27,42,.30) 100%),
+    url('images/hero.webp');
+  background-size: cover;
+  background-position: center right;
+}
+@media (max-width:900px){ .hero{ background-image: linear-gradient(180deg, rgba(13,27,42,.88), rgba(13,27,42,.82)), url('images/hero.webp'); } }
+*/
