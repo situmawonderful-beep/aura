@@ -2650,7 +2650,7 @@ function approveApplication(app, plan){
       hours:['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => ({day:d, open:'09:00', close:'18:00'})),
       gallery:[], services:[], reviews:[], staff:[], joined:localISO(start) };
     const ref = db.collection('businesses').doc(id), batch = db.batch();
-    batch.set(ref, biz);
+    batch.set(ref, biz); 
     batch.set(ref.collection('private').doc('owner'), { ownerEmail:app.ownerEmail });
     batch.update(db.collection('applications').doc(app.id), { status:'approved', businessId:id, reviewedAt:localISO() });
     adminOwnerEmails[id] = app.ownerEmail;

@@ -21,7 +21,7 @@
 <!-- ============ PUBLIC NAV ============ -->
 <header class="topnav" id="public-nav">
   <div class="topnav-inner">
-    <div class="brand" data-nav="home"><span class="brand-word">aura</span></div>
+    <div class="brand" data-nav="home"><span class="brand-word">Aura</span></div>
     <nav class="nav-links">
       <a href="#home" data-nav="home">Home</a>
       <a href="#discover" data-nav="discover">Discover</a>
@@ -29,7 +29,7 @@
     </nav>
     <div class="nav-actions">
       <a href="#login" class="btn btn-ghost btn-sm" data-nav="login" id="nav-login-btn">Log in</a>
-      <a href="#register" class="btn btn-primary btn-sm" id="nav-signup-btn">List Your Business</a>
+      <a href="#register" class="btn btn-primary btn-sm" id="nav-signup-btn">Register Your Business</a>
       <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">☰</button>
     </div>
   </div>
@@ -38,14 +38,14 @@
     <a href="#discover" data-nav="discover">Discover</a>
     <a href="#pricing" data-nav="pricing">Pricing</a>
     <a href="#login" data-nav="login">Log in</a>
-    <a href="#register">List Your Business</a>
+    <a href="#register" data-nav="register">Register Your Business</a>
   </div>
 </header>
 
 <main id="app-root">
 
 <!-- ============ LANDING ============ -->
-<div id="boot-loader" class="boot-loader" style="display:none" role="status" aria-live="polite"><span class="brand-word">aura</span><div class="spinner"></div><p id="boot-msg">Loading your dashboard</p></div>
+<div id="boot-loader" class="boot-loader" style="display:none" role="status" aria-live="polite"><span class="brand-word">Aura</span><div class="spinner"></div><p id="boot-msg">Loading your dashboard</p></div>
 
 <section class="view" id="view-home" data-view="home">
   <div class="hero">
@@ -59,7 +59,7 @@
           <a href="#register" class="btn btn-accent btn-glow">List Your Business →</a>
           <a href="#discover" class="btn btn-outline" data-nav="discover">Explore Businesses</a>
         </div>
-        <div class="hero-note">✓ Free forever plan &nbsp; ✓ No card required &nbsp; ✓ Onboarded by our team</div>
+        <div class="hero-note">✓ Free plan &nbsp; ✓ No card required &nbsp; ✓ Onboarded by our team</div>
         <div class="trust-row">
           <div><b>24/7</b><span>Online bookings</span></div>
           <div><b>1 link</b><span>For all your socials</span></div>
@@ -91,13 +91,13 @@
       <div class="steps-grid">
         <div class="step-card">
           <div class="step-num">1</div>
-          <h3>Create your business</h3>
-          <p>Add your business name, services, photos, location and opening hours.</p>
+          <h3>Create your business page</h3>
+          <p>Add your business name, services, photos, location and opening/closing hours.</p>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
           <h3>Share your page</h3>
-          <p>Get a simple business link that you can share on WhatsApp, Instagram, TikTok, Facebook, etc.</p>
+          <p>Get a simple business link that you can share on WhatsApp, Instagram, TikTok, X &amp; more.</p>
         </div>
         <div class="step-card">
           <div class="step-num">3</div>
@@ -113,10 +113,10 @@
       <div class="section-head">
         <span class="kicker">Everything you need</span>
         <h2>One platform, built for service businesses</h2>
-        <p>Every plan unlocks more of the platform — features are added as your business grows.</p>
+        <p>Every plan unlocks more of the platform — features are added as your upgrade your plan.</p>
       </div>
       <div class="features-grid" id="features-grid"></div>
-      <div style="text-align:center;margin-top:28px;"><a class="btn btn-outline" href="#pricing">See all plans and features</a></div>
+      <div style="text-align:center;margin-top:28px;"><a class="btn btn-outline" href="#pricing">See all plans</a></div>
     </div>
   </div>
 
@@ -124,10 +124,10 @@
     <div class="container">
       <div class="cta-band">
         <div>
-          <h3>Ready to give your business a home online?</h3>
+          <h3><em>Ready to give your business an online home</em></h3>
           <p>Fill in your details and we'll list your business on <em>Aura</em> after a quick check.</p>
         </div>
-        <a href="#register" class="btn btn-accent">List Your Business</a>
+        <a href="#register" class="btn btn-accent">Register Your Business</a>
       </div>
     </div>
   </div>
@@ -140,7 +140,7 @@
       <div class="section-head center" style="margin-left:auto;margin-right:auto;">
         <span class="kicker">Pricing</span>
         <h2>Plans that grow with your business</h2>
-        <p>Start free. Upgrade when you're ready to accept online bookings.</p>
+        <p>Start free. Upgrade when you're ready to accept online bookings and many other more cool features here on Aura.</p>
       </div>
       <div class="billing-toggle">
         <span style="font-size:14px;font-weight:500;">Monthly</span>
@@ -176,22 +176,22 @@
 
 <!-- ============ REGISTER ============ -->
 <section class="view" id="view-register" data-view="register">
-  <div class="form-page" style="max-width:580px;">
+  <div class="form-page" style="max-width:560px;">
     <div class="form-card">
-      <h2>List your business</h2>
-      <p class="sub">Fill in your details. We check every application and confirm it, usually within a day.</p>
+      <h2>Register your business</h2>
+      <p class="sub">Fill in your details. We check every application and confirm it, usually within 24 hours.</p>
       <form id="register-form" novalidate>
-        <div class="field" id="f-reg-name"><label for="reg-name">Business name</label><input id="reg-name" maxlength="80" autocomplete="organization"><div class="err">Enter your business name.</div></div>
+        <div class="field" id="f-reg-name"><label for="reg-name">Business name</label><input id="reg-name" maxlength="80" autocomplete="organization" Placeholder="C..R..E..A..M "><div class="err">Enter your business name.</div></div>
         <div class="form-row-2">
           <div class="field"><label for="reg-category">Category</label><select id="reg-category"><option>Barbershop</option><option>Salon</option><option>Spa</option><option>Nail studio</option><option>Massage</option><option>Other</option></select></div>
-          <div class="field" id="f-reg-location"><label for="reg-location">Location</label><input id="reg-location" maxlength="80" placeholder="e.g. Eldoret, Kenya"><div class="err">Enter your location.</div></div>
+          <div class="field" id="f-reg-location"><label for="reg-location">Location</label><input id="reg-location" maxlength="80" placeholder="e.g. Kakamega, Kenya"><div class="err">Enter your location.</div></div>
         </div>
-        <div class="field" id="f-reg-owner"><label for="reg-owner">Your name</label><input id="reg-owner" maxlength="80" autocomplete="name"><div class="err">Enter your name.</div></div>
+        <div class="field" id="f-reg-owner"><label for="reg-owner">Your name</label><input id="reg-owner" maxlength="80" autocomplete="name" placeholder="Castrol Wonder"><div class="err">Enter your name.</div></div>
         <div class="form-row-2">
           <div class="field" id="f-reg-phone"><label for="reg-phone">WhatsApp number</label><input id="reg-phone" maxlength="20" inputmode="tel" placeholder="07XX XXX XXX"><div class="err">Enter a valid phone number.</div></div>
-          <div class="field" id="f-reg-email"><label for="reg-email">Email (you log in with this)</label><input id="reg-email" type="email" maxlength="120" autocapitalize="none" autocomplete="email"><div class="err">Enter a valid email address.</div></div>
+          <div class="field" id="f-reg-email"><label for="reg-email">Email (you log in with this)</label><input id="reg-email" type="email" maxlength="120" autocapitalize="none" autocomplete="email" placeholder="you@email.com"><div class="err">Enter a valid email address.</div></div>
         </div>
-        <div class="field"><label for="reg-desc">About your business (optional)</label><textarea id="reg-desc" maxlength="400" placeholder="What you offer and what makes you different"></textarea></div>
+        <div class="field"><label for="reg-desc">About your business (optional)</label><textarea id="reg-desc" maxlength="400" placeholder="What you offer and what makes your business different"></textarea></div>
         <div class="field"><label for="reg-plan">Plan</label><select id="reg-plan"></select><div class="text-muted" style="font-size:12px;margin-top:6px;">Everyone starts free. Paid plans are switched on after payment is confirmed.</div></div>
         <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"><label>Website</label><input id="reg-website" tabindex="-1" autocomplete="off"></div>
         <button type="submit" class="btn btn-accent btn-block">Submit application</button>
@@ -199,17 +199,17 @@
       </form>
       <div id="register-done" style="display:none;text-align:center;padding:10px 0;">
         <h3 style="margin-bottom:10px;">Application received</h3>
-        <p class="text-muted">Thank you. We will check your details and contact you on WhatsApp. Once approved, you will get an email to set your password and log in.</p>
+        <p class="text-muted"><b>Thank you. We will check your details and contact you on WhatsApp. Once approved, you will get an email to set your password and log in</b>.</p>
         <a href="#home" class="btn btn-primary mt24">Back to home</a>
       </div>
-      <div class="form-foot">Prefer to talk? <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" style="color:var(--accent-ink);font-weight:600;">Message us on WhatsApp</a></div>
+      <div class="form-foot">Prefer to talk? <a href="https://wa.me/254115506649?text=Hi%2C%20I%27d%20like%20to%20list%20my%20business%20on%20Aura" target="_blank" rel="noopener" style="color:var(--accent-ink);font-weight:600;"><img class="whatsapp-logo"src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" style="width: 30px; height: 30px;"></a></div>
     </div>
   </div>
 </section>
 
 <section class="view" id="view-privacy" data-view="privacy">
   <div class="section"><div class="container" style="max-width:760px;line-height:1.7;">
-    <h2>Privacy Policy</h2><p class="text-muted">Last updated: 21 October 2026</p>
+    <h2>Privacy Policy</h2><p class="text-muted">Last updated: 25 October 2026</p>
     <p>Aura (“we”) helps small businesses in Kenya show their services and take bookings. This policy explains what we collect and why.</p>
     <h3>What we collect</h3>
     <ul><li><b>Customers:</b> your name, phone number, optional email, and the service, date and time you book.</li><li><b>Business owners:</b> your name, email, phone number, and the business details and photos you add.</li></ul>
@@ -228,7 +228,7 @@
 
 <section class="view" id="view-terms" data-view="terms">
   <div class="section"><div class="container" style="max-width:760px;line-height:1.7;">
-    <h2>Terms of Use</h2><p class="text-muted">Last updated: 21 October 2026</p>
+    <h2>Terms of Use</h2><p class="text-muted">Last updated: 25 October 2026</p>
     <p>By using Aura you agree to these terms.</p>
     <h3>What Aura is</h3>
     <p>Aura is a platform where businesses list services and customers request bookings. Aura is not the provider of the services. The business is responsible for its services, prices, hours and for honouring confirmed bookings.</p>
@@ -259,13 +259,13 @@
       <form id="login-form" novalidate>
         <div class="field" id="f-login-id">
           <label for="login-id">Email address</label>
-          <input type="email" id="login-id" placeholder="you@example.com" autocomplete="username" autocapitalize="none" spellcheck="false">
+          <input type="email" id="login-id" placeholder="you@email.com" autocomplete="username" autocapitalize="none" spellcheck="false">
           <div class="err">Enter a valid email address.</div>
         </div>
         <div class="field" id="f-login-pw">
           <label for="login-pw">Password</label>
           <div class="pw-field">
-            <input type="password" id="login-pw" placeholder="Your password" autocomplete="current-password">
+            <input type="password" id="login-pw" placeholder="Enter your password" autocomplete="current-password">
             <button type="button" class="pw-toggle" data-target="login-pw" aria-label="Show or hide password">Show</button>
           </div>
           <div class="err">Enter your password.</div>
@@ -278,7 +278,7 @@
       </form>
       <div class="or-divider"><span>or</span></div>
       <button type="button" class="btn btn-google btn-block" id="google-signin-btn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Sign in with Google</button>
-      <div class="form-foot">Don't have a business on <em>Aura</em> yet? <a href="#register" style="color:var(--accent-ink);font-weight:600;">Apply to get listed</a></div>
+      <div class="form-foot">Don't have a business on <em>Aura</em> yet? <a href="#register" style="color:var(--accent-ink);font-weight:600;">Apply to get listed on our platform</a></div>
     </div>
   </div>
 </section>
@@ -288,7 +288,7 @@
   <div class="app-shell">
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
     <aside class="app-sidebar" id="dash-sidebar">
-      <div class="brand" data-nav="home"><span class="brand-word">aura</span></div>
+      <div class="brand" data-nav="home"><span class="brand-word">Aura</span></div>
       <nav id="dash-sidenav"></nav>
       <div class="sidebar-footer">
         <div class="plan-chip"><span>Current plan</span><b id="sidebar-plan-label">Free</b></div>
@@ -316,7 +316,7 @@
   <div class="app-shell">
     <div class="sidebar-backdrop" id="admin-sidebar-backdrop"></div>
     <aside class="app-sidebar" id="admin-sidebar">
-      <div class="brand" data-nav="home"><span class="brand-word">aura</span> <span style="font-size:11px;font-weight:600;color:var(--muted);margin-left:4px;">Admin</span></div>
+      <div class="brand" data-nav="home"><span class="brand-word">Aura</span> <span style="font-size:11px;font-weight:600;color:var(--muted);margin-left:4px;">Admin</span></div>
       <nav id="admin-sidenav"></nav>
       <div class="sidebar-footer">
         <div class="side-link" data-nav="home"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5a2 2 0 00-2 2v12a2 2 0 002 2h4M16 8l4 4-4 4M20 12H9"/></svg></span>Exit admin</div>
@@ -341,7 +341,7 @@
   <div class="container">
     <div class="footer-grid">
       <div>
-        <div class="brand" data-nav="home" style="margin-bottom:12px;"><span class="brand-word">aura</span></div>
+        <div class="brand" data-nav="home" style="margin-bottom:12px;"><span class="brand-word">Aura</span></div>
         <p class="text-muted" style="font-size:13.5px;max-width:32ch;line-height:1.6;">A professional online presence and appointment system for Kenyan small businesses.</p>
       </div>
       <div>
@@ -354,7 +354,7 @@
         <h5>Company</h5>
         <a href="https://wa.me/254115506649" target="_blank" rel="noopener">Contact us on WhatsApp</a>
         <a href="#privacy">Privacy policy</a>
-        <a href="#terms">Terms of use</a>
+        <a href="#terms">Terms &amp; Conditionsx</a>
       </div>
       <div>
         <h5>Business owners</h5>

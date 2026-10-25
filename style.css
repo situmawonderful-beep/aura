@@ -3,6 +3,7 @@
    Navy #0D1B2A  |  Golden orange #FF9F1C  |  Cream #F5F0E6  |  White #FFFFFF
    (edit these values to restyle the whole site)
    ============================================================ */
+   
 :root{
   --navy: #0D1B2A;
   --ink: #0D1B2A;           /* headings + body text on light backgrounds */
@@ -40,6 +41,12 @@
   --font-body: 'Montserrat', system-ui, sans-serif;
 
   --container: 1180px;
+}
+.whatsapp-logo{
+  display: flex;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
 }
 
 /* Navy surfaces re-theme their contents by redefining the tokens locally */
